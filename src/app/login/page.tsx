@@ -1,6 +1,6 @@
 "use client"
 
-import { useTransition } from "react"
+import { useTransition, useState } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { loginSchema } from "@/lib/schemas"
@@ -20,10 +20,11 @@ import Link from "next/link"
 import { z } from "zod"
 import AuthLayout from "@/components/auth-layout"
 import Image from "next/image"
-import { Loader2 } from "lucide-react"
+import { Loader2, Eye, EyeOff } from "lucide-react"
 
 export default function LoginPage() {
     const [isPending, startTransition] = useTransition()
+    const [showPassword, setShowPassword] = useState(false)
 
     const form = useForm<z.infer<typeof loginSchema>>({
         resolver: zodResolver(loginSchema),
@@ -54,7 +55,15 @@ export default function LoginPage() {
                     alt="Graham Logo"
                     width={180}
                     height={60}
-                    className="mb-8"
+                    className="mb-8 dark:hidden block"
+                    priority
+                />
+                <Image
+                    src="/images/logo-white.png"
+                    alt="Graham Logo"
+                    width={180}
+                    height={60}
+                    className="mb-8 hidden dark:block"
                     priority
                 />
                 <h1 className="text-[#1A202C] text-xl font-bold mb-2">Entrar</h1>
@@ -75,7 +84,7 @@ export default function LoginPage() {
                                     <Input
                                         placeholder="Digite seu e-mail"
                                         {...field}
-                                        className="h-12 border-gray-200 focus-visible:ring-emerald-600 rounded-md"
+                                        className="h-12 border-gray-200 focus-visible:ring-emerald-600 rounded-md !bg-white !text-gray-900 placeholder:text-gray-400"
                                     />
                                 </FormControl>
                                 <FormMessage />
@@ -99,12 +108,27 @@ export default function LoginPage() {
                                         </Link>
                                     </div>
                                     <FormControl>
-                                        <Input
-                                            type="password"
-                                            placeholder="Digite sua senha"
-                                            {...field}
-                                            className="h-12 border-gray-200 focus-visible:ring-emerald-600 rounded-md"
-                                        />
+                                        <div className="relative">
+                                            <Input
+                                                type={showPassword ? "text" : "password"}
+                                                placeholder="Digite sua senha"
+                                                {...field}
+                                                className="h-12 border-gray-200 focus-visible:ring-emerald-600 rounded-md !bg-white !text-gray-900 placeholder:text-gray-400 pr-10"
+                                            />
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                                                onClick={() => setShowPassword(!showPassword)}
+                                            >
+                                                {showPassword ? (
+                                                    <EyeOff className="h-5 w-5 text-gray-500" />
+                                                ) : (
+                                                    <Eye className="h-5 w-5 text-gray-500" />
+                                                )}
+                                            </Button>
+                                        </div>
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>

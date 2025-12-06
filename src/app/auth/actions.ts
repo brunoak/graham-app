@@ -2,10 +2,10 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/server'
 
 export async function login(formData: FormData) {
-    const supabase = createClient()
+    const supabase = await createClient()
 
     // TODO: Add Zod validation here
     const email = formData.get('email') as string
@@ -17,7 +17,8 @@ export async function login(formData: FormData) {
     })
 
     if (error) {
-        return { error: 'Invalid credentials' }
+        console.error('Login error:', error)
+        return { error: 'Credenciais inválidas ou erro no login.' }
     }
 
     revalidatePath('/', 'layout')
@@ -25,7 +26,7 @@ export async function login(formData: FormData) {
 }
 
 export async function signup(formData: FormData) {
-    const supabase = createClient()
+    const supabase = await createClient()
 
     // TODO: Add Zod validation here
     const email = formData.get('email') as string
@@ -51,7 +52,7 @@ export async function signup(formData: FormData) {
 }
 
 export async function logout() {
-    const supabase = createClient()
+    const supabase = await createClient()
     await supabase.auth.signOut()
     revalidatePath('/', 'layout')
     redirect('/login')
