@@ -43,7 +43,7 @@ export function InvestmentsOverview() {
                     </div>
 
                     <div className="space-y-1">
-                        <div className="grid grid-cols-12 text-xs font-medium text-gray-400 mb-2 px-2">
+                        <div className="grid grid-cols-12 text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2 px-2">
                             <div className="col-span-6">Empresas</div>
                             <div className="col-span-3 text-center">Variação</div>
                             <div className="col-span-3 text-right">Cotação atual</div>
@@ -57,12 +57,12 @@ export function InvestmentsOverview() {
                                         </AvatarFallback>
                                     </Avatar>
                                     <div className="flex flex-col">
-                                        <span className="font-semibold text-gray-900 dark:text-white text-sm">{asset.ticker}</span>
+                                        <span className="text-gray-700 dark:text-gray-200 text-sm">{asset.ticker}</span>
                                         <span className="text-[10px] text-gray-500 dark:text-gray-400">{asset.name}</span>
                                     </div>
                                 </div>
                                 <div className="col-span-3 text-center">
-                                    <span className={cn("text-xs font-medium", asset.positive ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>
+                                    <span className={cn("text-xs", asset.positive ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>
                                         {asset.variation}
                                     </span>
                                 </div>
@@ -83,7 +83,7 @@ export function InvestmentsOverview() {
                 </CardHeader>
                 <CardContent>
                     <div className="space-y-1 mt-6">
-                        <div className="grid grid-cols-12 text-xs font-medium text-gray-400 mb-2 px-2">
+                        <div className="grid grid-cols-12 text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2 px-2">
                             <div className="col-span-5">Moedas</div>
                             <div className="col-span-3 text-center">Variação</div>
                             <div className="col-span-4 text-right">Valores atuais</div>
@@ -91,15 +91,15 @@ export function InvestmentsOverview() {
                         {marketData.map((item) => (
                             <div key={item.name} className="grid grid-cols-12 items-center p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors border-b border-gray-50 last:border-0 dark:border-zinc-800/50">
                                 <div className="col-span-5 flex items-center gap-3">
-                                    <span className="font-medium text-gray-700 dark:text-gray-200 text-sm">{item.name}</span>
+                                    <span className="text-gray-600 dark:text-gray-400 text-sm">{item.name}</span>
                                 </div>
                                 <div className="col-span-3 text-center">
-                                    <span className={cn("text-xs font-medium", item.positive ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>
+                                    <span className={cn("text-xs", item.positive ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>
                                         {item.variation}
                                     </span>
                                 </div>
                                 <div className="col-span-4 text-right">
-                                    <span className="text-sm text-gray-600 dark:text-gray-300 font-medium">{item.price}</span>
+                                    <span className="text-sm text-gray-600 dark:text-gray-400">{item.price}</span>
                                 </div>
                             </div>
                         ))}

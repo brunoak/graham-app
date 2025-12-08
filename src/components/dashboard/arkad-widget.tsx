@@ -10,7 +10,7 @@ export function ArkadWidget() {
         <Link href="/dashboard/arkad" className="contents">
             <Card className="col-span-12 md:col-span-4 bg-white dark:bg-zinc-900 border-none shadow-sm shadow-gray-200 dark:shadow-none flex flex-col h-full min-h-[400px] cursor-pointer hover:shadow-md transition-shadow group">
                 <CardHeader className="pb-4">
-                    <CardTitle className="text-base font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                    <CardTitle className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                         Arkad <Sparkles className="h-3 w-3 text-amber-500" />
                     </CardTitle>
                     <CardDescription className="text-xs text-emerald-600 font-medium">Seu mentor financeiro</CardDescription>

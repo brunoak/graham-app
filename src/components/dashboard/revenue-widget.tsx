@@ -33,7 +33,7 @@ export function RevenueWidget() {
     return (
         <Card className="col-span-12 lg:col-span-8 bg-white dark:bg-zinc-900 border-none shadow-sm shadow-gray-200 dark:shadow-none flex flex-col h-full min-h-[400px]">
             <CardHeader className="flex flex-row items-center justify-between pb-8">
-                <CardTitle className="text-base font-semibold text-gray-900 dark:text-white">
+                <CardTitle className="text-lg font-semibold text-gray-900 dark:text-white">
                     {view === "overview" ? "Receita" : "Fontes de Receita"}
                 </CardTitle>
                 <div className="flex items-center gap-1 bg-gray-100 dark:bg-zinc-800 p-1 rounded-md">

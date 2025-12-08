@@ -2,9 +2,10 @@ import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { SummaryCards } from "@/components/dashboard/summary-cards"
 import { RevenueWidget } from "@/components/dashboard/revenue-widget"
-import { TransactionsTable } from "@/components/dashboard/transactions-table"
+import { TransactionsTable } from "@/components/transactions/transactions-table"
 import { ArkadWidget } from "@/components/dashboard/arkad-widget"
 import { InvestmentsOverview } from "@/components/dashboard/investments-overview"
+import { mockFinancialData } from "@/lib/mock-data"
 
 export default async function DashboardPage() {
     const supabase = await createClient()
@@ -17,26 +18,18 @@ export default async function DashboardPage() {
         redirect("/login")
     }
 
-    // Mock data - In the future we will fetch this from the database
-    const financialData = {
-        balance: 12500.00,
-        income: 8500.00,
-        expenses: 3200.00,
-        investments: 150000.00
-    }
-
     return (
         <div className="space-y-6">
             <div className="flex flex-col space-y-2">
-                <h2 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">Dashboards</h2>
+                {/* <h2 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">Dashboards</h2> */}
             </div>
 
             {/* Top Cards */}
             <SummaryCards
-                balance={financialData.balance}
-                income={financialData.income}
-                expenses={financialData.expenses}
-                investments={financialData.investments}
+                balance={mockFinancialData.balance}
+                income={mockFinancialData.income}
+                expenses={mockFinancialData.expenses}
+                investments={mockFinancialData.investments}
             />
 
             {/* Main Content Grid */}
@@ -53,7 +46,7 @@ export default async function DashboardPage() {
 
                 {/* Row 3: Recent Transactions */}
                 <div className="col-span-12">
-                    <TransactionsTable />
+                    <TransactionsTable mode="widget" />
                 </div>
             </div>
         </div>
