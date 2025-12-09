@@ -3,7 +3,7 @@ import { redirect } from "next/navigation"
 import { TransactionsTable } from "@/components/transactions/transactions-table"
 import { SummaryCards } from "@/components/dashboard/summary-cards"
 import { ArkadWidget } from "@/components/dashboard/arkad-widget"
-import { mockFinancialData } from "@/lib/mock-data"
+import { getFinancialSummary, getTransactions } from "@/lib/data/transaction-data"
 
 export default async function TransactionsPage() {
     const supabase = await createClient()
@@ -16,6 +16,9 @@ export default async function TransactionsPage() {
         redirect("/login")
     }
 
+    const summary = await getFinancialSummary()
+    const transactions = await getTransactions(50)
+
     return (
         <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
             <div className="flex flex-col space-y-2">
@@ -24,17 +27,17 @@ export default async function TransactionsPage() {
 
             {/* Top Cards */}
             <SummaryCards
-                balance={mockFinancialData.balance}
-                income={mockFinancialData.income}
-                expenses={mockFinancialData.expenses}
-                investments={mockFinancialData.investments}
+                balance={summary.balance}
+                income={summary.income}
+                expenses={summary.expenses}
+                investments={summary.investments}
             />
 
             {/* Main Content Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                 {/* Transactions Table - 75% width */}
                 <div className="lg:col-span-3">
-                    <TransactionsTable />
+                    <TransactionsTable transactions={transactions} />
                 </div>
 
                 {/* Arkad AI Widget - 25% width */}

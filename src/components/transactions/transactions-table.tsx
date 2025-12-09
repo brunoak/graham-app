@@ -1,21 +1,16 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { format, subMonths, addMonths } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import {
-    ChevronDown,
     ChevronLeft,
     ChevronRight,
     Edit2,
     Trash2,
-    Search,
     Plus,
     Upload,
-    Filter,
-    PieChart,
-    Settings,
 } from "lucide-react"
 
 import {
@@ -26,7 +21,6 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -34,15 +28,25 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { FilterDialog } from "./filter-dialog"
 import { mockTransactions } from "@/lib/mock-data"
 import { TransactionDialog } from "./transaction-dialog"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Input } from "@/components/ui/input"
 import { CategoryBadge } from "./category-badge"
+import { TransactionDTO } from "@/lib/data/transaction-data"
 
-export function TransactionsTable({ mode = "default" }: { mode?: "default" | "widget" }) {
+interface TransactionsTableProps {
+    mode?: "default" | "widget"
+    transactions?: TransactionDTO[]
+}
+
+export function TransactionsTable({ mode = "default", transactions: initialTransactions }: TransactionsTableProps) {
     const [currentDate, setCurrentDate] = useState(new Date())
     const [selectedRows, setSelectedRows] = useState<number[]>([])
-    // Initialize state with mock data to allow updates
-    const [data, setData] = useState(mockTransactions)
+    // Initialize state with props if available, otherwise mock
+    const [data, setData] = useState<TransactionDTO[]>(initialTransactions || mockTransactions)
+
+    useEffect(() => {
+        if (initialTransactions) {
+            setData(initialTransactions)
+        }
+    }, [initialTransactions])
 
     // Filter transactions (mock logic to simulate month filtering would go here)
     const transactions = mode === "widget" ? data.slice(0, 5) : data

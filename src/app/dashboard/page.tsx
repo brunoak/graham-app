@@ -5,7 +5,7 @@ import { RevenueWidget } from "@/components/dashboard/revenue-widget"
 import { TransactionsTable } from "@/components/transactions/transactions-table"
 import { ArkadWidget } from "@/components/dashboard/arkad-widget"
 import { InvestmentsOverview } from "@/components/dashboard/investments-overview"
-import { mockFinancialData } from "@/lib/mock-data"
+import { getFinancialSummary, getTransactions } from "@/lib/data/transaction-data"
 
 export default async function DashboardPage() {
     const supabase = await createClient()
@@ -18,6 +18,9 @@ export default async function DashboardPage() {
         redirect("/login")
     }
 
+    const summary = await getFinancialSummary()
+    const transactions = await getTransactions(5)
+
     return (
         <div className="space-y-6">
             <div className="flex flex-col space-y-2">
@@ -26,10 +29,10 @@ export default async function DashboardPage() {
 
             {/* Top Cards */}
             <SummaryCards
-                balance={mockFinancialData.balance}
-                income={mockFinancialData.income}
-                expenses={mockFinancialData.expenses}
-                investments={mockFinancialData.investments}
+                balance={summary.balance}
+                income={summary.income}
+                expenses={summary.expenses}
+                investments={summary.investments}
             />
 
             {/* Main Content Grid */}
@@ -46,7 +49,10 @@ export default async function DashboardPage() {
 
                 {/* Row 3: Recent Transactions */}
                 <div className="col-span-12">
-                    <TransactionsTable mode="widget" />
+                    {/* Row 3: Recent Transactions */}
+                    <div className="col-span-12">
+                        <TransactionsTable mode="widget" transactions={transactions} />
+                    </div>
                 </div>
             </div>
         </div>

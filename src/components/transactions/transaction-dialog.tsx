@@ -1,6 +1,8 @@
 "use client"
 
-import { useState } from "react"
+
+import { useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
 import {
     Dialog,
     DialogContent,
@@ -27,6 +29,9 @@ import { ptBR } from "date-fns/locale"
 import { CalendarIcon, TrendingDown, TrendingUp, ChevronDown } from "lucide-react"
 import { CategorySelectionDialog } from "./category-selection-dialog"
 import { getCategoryByName } from "@/lib/categories"
+import { createTransaction } from "@/lib/actions/transaction-actions"
+import { toast } from "sonner"
+
 
 export interface TransactionData {
     id?: number
@@ -47,6 +52,8 @@ interface TransactionDialogProps {
 
 export function TransactionDialog({ children, onSave }: TransactionDialogProps) {
     const [open, setOpen] = useState(false)
+    const [isPending, startTransition] = useTransition()
+    const router = useRouter()
     const [type, setType] = useState<"expense" | "income">("expense")
 
     // Form State
@@ -66,6 +73,18 @@ export function TransactionDialog({ children, onSave }: TransactionDialogProps) 
     const category = getCategoryByName(categoryName)
     const CategoryIcon = category.icon
 
+    const resetForm = () => {
+        setAmount("")
+        setCurrency("BRL")
+        setName("")
+        setCategoryName("Outros")
+        setDate(new Date())
+        setVia("nubank")
+        setCustomVia("")
+        setDescription("")
+        setType("expense")
+    }
+
     const handleSave = () => {
         let numericAmount = 0
         // Clean currency symbol and normalize format
@@ -78,39 +97,37 @@ export function TransactionDialog({ children, onSave }: TransactionDialogProps) 
 
         numericAmount = parseFloat(cleanValue)
 
-        if (isNaN(numericAmount) || numericAmount <= 0) return
+        if (isNaN(numericAmount) || numericAmount <= 0) {
+            toast.error("Por favor, informe um valor válido.")
+            return
+        }
 
         // Logic for Custom Bank Name
         const finalVia = via === "outro" ? (customVia || "Outro") : via
 
-        if (onSave) {
-            onSave({
-                type,
-                amount: numericAmount,
-                currency,
-                name,
-                category: categoryName,
-                date: date || new Date(),
-                via: finalVia,
-                description
-            })
+        const transactionData = {
+            type,
+            amount: numericAmount,
+            name: name,
+            description: description,
+            date: date || new Date(),
+            category: categoryName,
+            via: finalVia,
+            isRecurring: false
         }
-        setOpen(false)
-        resetForm()
-    }
 
-    const resetForm = () => {
-        setAmount("")
-        setCurrency("BRL")
-        setName("")
-        setCategoryName("Outros")
-        setDate(new Date())
-
-        setVia("nubank")
-        setCustomVia("")
-
-        setDescription("")
-        setType("expense")
+        startTransition(async () => {
+            try {
+                await createTransaction(transactionData)
+                toast.success("Transação salva com sucesso!")
+                setOpen(false)
+                resetForm()
+                router.refresh()
+            } catch (error) {
+                console.error(error)
+                toast.error(error instanceof Error ? error.message : "Erro ao salvar transação")
+            }
+        })
     }
 
     const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -336,6 +353,7 @@ export function TransactionDialog({ children, onSave }: TransactionDialogProps) 
                     <Button variant="ghost" onClick={() => setOpen(false)}>Cancelar</Button>
                     <Button
                         onClick={handleSave}
+                        disabled={isPending}
                         className={cn(
                             "text-white shadow-sm",
                             type === "expense"
@@ -343,7 +361,7 @@ export function TransactionDialog({ children, onSave }: TransactionDialogProps) 
                                 : "bg-emerald-600 hover:bg-emerald-700"
                         )}
                     >
-                        {type === "expense" ? "Adicionar Despesa" : "Adicionar Receita"}
+                        {isPending ? "Salvando..." : (type === "expense" ? "Adicionar Despesa" : "Adicionar Receita")}
                     </Button>
                 </DialogFooter>
             </DialogContent>
