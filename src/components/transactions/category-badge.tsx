@@ -1,6 +1,6 @@
 
 import { useState } from "react"
-import { getCategoryByName } from "@/lib/categories"
+import { getCategoryByName, AVAILABLE_ICONS } from "@/lib/categories" // Import AVAILABLE_ICONS
 import { cn } from "@/lib/utils"
 import { CategorySelectionDialog } from "./category-selection-dialog"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -8,17 +8,27 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 interface CategoryBadgeProps {
     categoryName: string
     transactionId?: number | string
-    onUpdate?: (newCategory: string) => void
+    onUpdate?: (newCategory: any) => void
     size?: "sm" | "md"
     interactive?: boolean
+    // New Props for Dynamic Data
+    iconName?: string
+    color?: string
 }
 
-export function CategoryBadge({ categoryName, onUpdate, size = "md", interactive = true }: CategoryBadgeProps) {
+export function CategoryBadge({ categoryName, onUpdate, size = "md", interactive = true, iconName, color }: CategoryBadgeProps) {
     const [isTooltipOpen, setIsTooltipOpen] = useState(false)
     const [isDialogOpen, setIsDialogOpen] = useState(false)
 
     const category = getCategoryByName(categoryName)
-    const Icon = category.icon
+
+    // Resolve Icon: Use prop if available (DB dynamic), else fallback to static lookup
+    const Icon = iconName
+        ? (AVAILABLE_ICONS[iconName as keyof typeof AVAILABLE_ICONS] || AVAILABLE_ICONS.MoreHorizontal)
+        : category.icon
+
+    // Resolve Color
+    const displayColor = color || category.color
 
     // Fallback description if none exists
     const description = category.description
@@ -41,7 +51,7 @@ export function CategoryBadge({ categoryName, onUpdate, size = "md", interactive
             <Icon
                 strokeWidth={1.5}
                 className={cn(
-                    category.color,
+                    displayColor,
                     size === "sm" ? "h-4 w-4" : "h-5 w-5"
                 )}
             />

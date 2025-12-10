@@ -12,8 +12,11 @@ export const transactionSchema = z.object({
     name: z.string().min(1, "Nome é obrigatório"),
     description: z.string().optional(),
     date: z.coerce.date(),
-    category: z.string().min(1, "Categoria é obrigatória"),
+    // We prefer category_id now, but keep category name for legacy/fallback
+    category: z.string().optional(),
+    category_id: z.string().optional(),
     via: z.string().min(1, "Conta é obrigatória"),
+    currency: z.enum(["BRL", "USD"]).default("BRL"),
     isRecurring: z.boolean().default(false).optional(),
 })
 

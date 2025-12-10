@@ -2,20 +2,58 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Wallet, TrendingUp, TrendingDown, PiggyBank } from "lucide-react"
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 interface SummaryCardsProps {
     balance: number
     income: number
     expenses: number
     investments: number
+    balanceChange: number
+    incomeChange: number
+    expensesChange: number
+    investmentsChange: number
 }
 
-export function SummaryCards({ balance, income, expenses, investments }: SummaryCardsProps) {
+export function SummaryCards({
+    balance, income, expenses, investments,
+    balanceChange, incomeChange, expensesChange, investmentsChange
+}: SummaryCardsProps) {
     const formatCurrency = (value: number) => {
         return new Intl.NumberFormat('pt-BR', {
             style: 'currency',
             currency: 'BRL',
         }).format(value)
+    }
+
+    const PercentageBadge = ({ value = 0, inverse = false }: { value?: number, inverse?: boolean }) => {
+        const safeValue = value ?? 0
+        const isPositive = safeValue >= 0
+        const isGood = inverse ? !isPositive : isPositive
+
+        const colorClass = isGood
+            ? "text-emerald-700 bg-emerald-100 dark:bg-emerald-900/50 dark:text-emerald-400"
+            : "text-red-700 bg-red-100 dark:bg-red-900/50 dark:text-red-400"
+
+        return (
+            <TooltipProvider>
+                <Tooltip delayDuration={300}>
+                    <TooltipTrigger asChild>
+                        <span className={`text-xs font-medium px-1.5 py-0.5 rounded-md ${colorClass} cursor-help`}>
+                            {safeValue > 0 ? "+" : ""}{safeValue.toFixed(1)}%
+                        </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        <p>Comparado com o mês anterior</p>
+                    </TooltipContent>
+                </Tooltip>
+            </TooltipProvider>
+        )
     }
 
     return (
@@ -36,9 +74,7 @@ export function SummaryCards({ balance, income, expenses, investments }: Summary
                 </CardHeader>
                 <CardContent>
                     <div className="flex items-center space-x-2">
-                        <span className="text-xs font-medium text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-md dark:bg-emerald-900/50 dark:text-emerald-400">
-                            +0.0%
-                        </span>
+                        <PercentageBadge value={balanceChange} />
                     </div>
                 </CardContent>
             </Card>
@@ -59,9 +95,7 @@ export function SummaryCards({ balance, income, expenses, investments }: Summary
                 </CardHeader>
                 <CardContent>
                     <div className="flex items-center space-x-2">
-                        <span className="text-xs font-medium text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-md dark:bg-emerald-900/50 dark:text-emerald-400">
-                            +0.0%
-                        </span>
+                        <PercentageBadge value={incomeChange} />
                     </div>
                 </CardContent>
             </Card>
@@ -82,9 +116,8 @@ export function SummaryCards({ balance, income, expenses, investments }: Summary
                 </CardHeader>
                 <CardContent>
                     <div className="flex items-center space-x-2">
-                        <span className="text-xs font-medium text-red-700 bg-red-100 px-1.5 py-0.5 rounded-md dark:bg-red-900/50 dark:text-red-400">
-                            0.0%
-                        </span>
+                        {/* Expenses: Inverse logic (Increase = Bad/Red, Decrease = Good/Green) */}
+                        <PercentageBadge value={expensesChange} inverse />
                     </div>
                 </CardContent>
             </Card>
@@ -105,9 +138,7 @@ export function SummaryCards({ balance, income, expenses, investments }: Summary
                 </CardHeader>
                 <CardContent>
                     <div className="flex items-center space-x-2">
-                        <span className="text-xs font-medium text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-md dark:bg-emerald-900/50 dark:text-emerald-400">
-                            0.0%
-                        </span>
+                        <PercentageBadge value={investmentsChange} />
                     </div>
                 </CardContent>
             </Card>

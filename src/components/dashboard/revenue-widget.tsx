@@ -6,29 +6,16 @@ import { Button } from "@/components/ui/button"
 import { Area, AreaChart, CartesianGrid, XAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell } from "recharts"
 import { Info } from "lucide-react"
 
-const monthlyData = [
-    { name: "Jan", total: 34000 },
-    { name: "Fev", total: 42000 },
-    { name: "Mar", total: 38000 },
-    { name: "Abr", total: 55000 },
-    { name: "Maio", total: 48000 },
-    { name: "Jun", total: 52000 },
-    { name: "Jul", total: 60000 },
-    { name: "Ago", total: 45000 },
-    { name: "Set", total: 80000 },
-    { name: "Out", total: 65000 },
-    { name: "Nov", total: 75000 },
-    { name: "Dez", total: 85000 },
-]
+import { MonthlyMetric, CategoryMetric } from "@/lib/data/dashboard-data"
 
-const sourcesData = [
-    { name: "Online", value: 65, color: "#0ea5e9" }, // Sky blue
-    { name: "Offline", value: 45, color: "#14b8a6" }, // Teal
-    { name: "Direto", value: 30, color: "#a855f7" }, // Purple
-]
+interface RevenueWidgetProps {
+    monthlyData: MonthlyMetric[]
+    categoryData: CategoryMetric[]
+}
 
-export function RevenueWidget() {
+export function RevenueWidget({ monthlyData, categoryData }: RevenueWidgetProps) {
     const [view, setView] = useState<"overview" | "sources">("overview")
+
 
     return (
         <Card className="col-span-12 lg:col-span-8 bg-white dark:bg-zinc-900 border-none shadow-sm shadow-gray-200 dark:shadow-none flex flex-col h-full min-h-[400px]">
@@ -81,7 +68,7 @@ export function RevenueWidget() {
                             />
                             <Area
                                 type="monotone"
-                                dataKey="total"
+                                dataKey="income"
                                 stroke="#10b981"
                                 fillOpacity={1}
                                 fill="url(#colorTotal)"
@@ -95,7 +82,7 @@ export function RevenueWidget() {
                             <ResponsiveContainer width="100%" height="100%">
                                 <PieChart>
                                     <Pie
-                                        data={sourcesData}
+                                        data={categoryData.length > 0 ? categoryData : [{ name: "Sem dados", value: 1, color: "#e5e7eb" } as any]} // Fallback for empty
                                         cx="50%"
                                         cy="50%"
                                         innerRadius={60}
@@ -104,8 +91,8 @@ export function RevenueWidget() {
                                         dataKey="value"
                                         stroke="none"
                                     >
-                                        {sourcesData.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={entry.color} />
+                                        {categoryData.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={entry.color || "#0ea5e9"} />
                                         ))}
                                     </Pie>
                                     <Tooltip />
@@ -113,23 +100,25 @@ export function RevenueWidget() {
                             </ResponsiveContainer>
                             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                                 <span className="text-sm font-medium text-muted-foreground">Total</span>
-                                <span className="text-2xl font-bold text-gray-900 dark:text-white">140</span>
+                                <span className="text-2xl font-bold text-gray-900 dark:text-white">
+                                    {categoryData.length}
+                                </span>
                             </div>
                         </div>
 
                         <div className="space-y-4 w-full md:w-1/3">
                             <div className="flex items-center justify-between text-xs font-semibold text-gray-500 uppercase pb-2 border-b border-gray-100 dark:border-zinc-800">
                                 <span>Origem</span>
-                                <span>Perc.</span>
+                                <span>Valor</span>
                             </div>
-                            {sourcesData.map((item) => (
+                            {categoryData.map((item) => (
                                 <div key={item.name} className="flex items-center justify-between text-sm">
                                     <div className="flex items-center gap-2">
-                                        <div className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color }} />
+                                        <div className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color || "#0ea5e9" }} />
                                         <span className="text-gray-700 dark:text-gray-300 font-medium">{item.name}</span>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        <span className="text-gray-500 font-medium">{item.value}%</span>
+                                        <span className="text-gray-500 font-medium">R$ {item.value}</span>
                                     </div>
                                 </div>
                             ))}

@@ -1,5 +1,6 @@
 
-import { useState } from "react"
+
+import { useState, useEffect, useTransition } from "react"
 import { Search, Plus, Trash2, Check, Edit2, ArrowLeft } from "lucide-react"
 import {
     Dialog,
@@ -13,17 +14,12 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import {
-    CATEGORIES,
-    getCategoryByName,
-    Category,
-    addCategory,
-    removeCategory,
     AVAILABLE_ICONS,
     CATEGORY_TYPES,
     CATEGORY_CLASSIFICATIONS,
-    CategoryType,
-    CategoryClassification,
-    COLOR_OPTIONS
+    COLOR_OPTIONS,
+    // Types
+    Category as CategoryType // Renaming to avoid conflict with local usage if needed, but we can reuse the type or define a new one matching DB
 } from "@/lib/categories"
 import { cn } from "@/lib/utils"
 import {
@@ -36,10 +32,27 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { getCategories, createCategory, updateCategory, deleteCategory, type CategoryDTO } from "@/lib/actions/category-actions"
+import { toast } from "sonner"
+
+// We can extend the Category interface to match the DB one
+// We can extend the Category interface to match the DB one
+interface Category {
+    id: string
+    name: string
+    description?: string
+    type: string
+    classification: string
+    icon: any // LucideIcon is tricky to serialize, we store string name in DB. The UI needs to map back.
+    iconName: string // Helper
+    color: string
+    is_default: boolean
+}
 
 interface CategorySelectionDialogProps {
     currentCategory: string
-    onSelect: (category: string) => void
+    // Updated to accept full Category object
+    onSelect: (category: Category) => void
     children: React.ReactNode
     onOpenChange?: (open: boolean) => void
 }
@@ -48,6 +61,9 @@ export function CategorySelectionDialog({ currentCategory, onSelect, children, o
     const [open, setOpen] = useState(false)
     const [search, setSearch] = useState("")
     const [view, setView] = useState<"list" | "form">("list")
+    const [categories, setCategories] = useState<Category[]>([])
+    const [loading, setLoading] = useState(true)
+    const [isPending, startTransition] = useTransition()
 
     // Delete Confirmation State
     const [categoryToDelete, setCategoryToDelete] = useState<Category | null>(null)
@@ -70,10 +86,36 @@ export function CategorySelectionDialog({ currentCategory, onSelect, children, o
         color: "text-gray-500"
     })
 
+    // Load categories
+    const loadCategories = async () => {
+        setLoading(true)
+        try {
+            const data = await getCategories()
+            // Map DB data to UI format
+            const mapped = data.map((c: any) => ({
+                ...c,
+                iconName: c.icon,
+                icon: AVAILABLE_ICONS[c.icon as keyof typeof AVAILABLE_ICONS] || AVAILABLE_ICONS.MoreHorizontal
+            }))
+            setCategories(mapped)
+        } catch (error) {
+            console.error(error)
+            toast.error("Erro ao carregar categorias")
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    useEffect(() => {
+        if (open) {
+            loadCategories()
+        }
+    }, [open])
+
     // Filter Categories
-    const filteredCategories = CATEGORIES.filter(c =>
+    const filteredCategories = categories.filter(c =>
         c.name.toLowerCase().includes(search.toLowerCase()) ||
-        c.description?.toLowerCase().includes(search.toLowerCase())
+        (c.description && c.description.toLowerCase().includes(search.toLowerCase()))
     )
 
     const groupedCategories = filteredCategories.reduce((acc, category) => {
@@ -84,7 +126,7 @@ export function CategorySelectionDialog({ currentCategory, onSelect, children, o
     }, {} as Record<string, Category[]>)
 
     const handleSelect = (category: Category) => {
-        onSelect(category.name)
+        onSelect(category)
         setOpen(false)
     }
 
@@ -103,28 +145,35 @@ export function CategorySelectionDialog({ currentCategory, onSelect, children, o
     const handleSave = () => {
         if (!formData.name) return
 
-        const newCategory: Category = {
-            id: editingId || crypto.randomUUID(),
-            name: formData.name,
-            description: formData.description,
-            type: formData.type,
-            classification: formData.classification,
-            icon: AVAILABLE_ICONS[formData.iconName as keyof typeof AVAILABLE_ICONS] || AVAILABLE_ICONS.MoreHorizontal,
-            color: formData.color
-        }
+        startTransition(async () => {
+            try {
+                const payload: CategoryDTO = {
+                    name: formData.name,
+                    description: formData.description,
+                    type: formData.type,
+                    classification: formData.classification,
+                    icon: formData.iconName,
+                    color: formData.color
+                }
 
-        // Simulating update by removing old if editing and adding new
-        // Since we don't have a real update method in the mock
-        if (editingId) {
-            removeCategory(editingId)
-        }
-        addCategory(newCategory)
+                if (editingId) {
+                    await updateCategory(editingId, payload)
+                    toast.success("Categoria atualizada")
+                } else {
+                    const newId = await createCategory(payload)
+                    toast.success("Categoria criada")
+                    // Auto select?
+                    // onSelect(newId) 
+                    // No, let's just refresh list
+                }
 
-        // Select it immediately
-        onSelect(newCategory.name)
-        setOpen(false)
-        resetForm()
-        setView("list")
+                await loadCategories()
+                setView("list")
+                resetForm()
+            } catch (error) {
+                toast.error("Erro ao salvar categoria")
+            }
+        })
     }
 
     const handleDelete = (category: Category) => {
@@ -133,28 +182,32 @@ export function CategorySelectionDialog({ currentCategory, onSelect, children, o
 
     const confirmDelete = () => {
         if (categoryToDelete) {
-            removeCategory(categoryToDelete.id)
-            setCategoryToDelete(null)
-            // If the deleted category was selected, maybe clear selection? Or leave it.
-            // For now we just refresh the view (React re-renders as CATEGORIES array mutates)
-            // Note: In a real app we'd need state to trigger re-render of list logic, but since this component re-renders on state change, and CATEGORIES is global (kinda), it might lag unless we force update.
-            // Actually, since CATEGORIES is external, react won't see the push/slice.
-            // We need a brute force re-render. Let's toggle 'search' or add a version state.
-            setSearch(s => s + " ") // trigger re-render hack
-            setTimeout(() => setSearch(s => s.trim()), 0)
+            startTransition(async () => {
+                try {
+                    await deleteCategory(categoryToDelete.id)
+                    toast.success("Categoria excluída")
+                    await loadCategories()
+                } catch (error) {
+                    toast.error("Erro ao excluir")
+                } finally {
+                    setCategoryToDelete(null)
+                }
+            })
         }
     }
 
     const handleEditStart = (category: Category) => {
-        const iconEntry = Object.entries(AVAILABLE_ICONS).find(([_, iconCmd]) => iconCmd === category.icon)
-        const iconName = iconEntry ? iconEntry[0] : "MoreHorizontal"
+        if (category.is_default) {
+            toast.info("Categorias padrão não podem ser editadas")
+            return
+        }
 
         setFormData({
             name: category.name,
             description: category.description || "",
             type: category.type,
             classification: category.classification,
-            iconName,
+            iconName: category.iconName,
             color: category.color
         })
         setEditingId(category.id)
@@ -213,7 +266,11 @@ export function CategorySelectionDialog({ currentCategory, onSelect, children, o
                     </DialogHeader>
 
                     <div className="flex-1 overflow-y-auto p-6">
-                        {view === "form" ? (
+                        {loading ? (
+                            <div className="flex items-center justify-center h-40">
+                                <span className="text-gray-400">Carregando categorias...</span>
+                            </div>
+                        ) : view === "form" ? (
                             <div className="space-y-6">
                                 {/* Color & Icon Picker section */}
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -327,8 +384,12 @@ export function CategorySelectionDialog({ currentCategory, onSelect, children, o
 
                                 <div className="pt-4 flex gap-3">
                                     <Button variant="outline" className="flex-1" onClick={() => setView("list")}>Cancelar</Button>
-                                    <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleSave}>
-                                        {editingId ? "Salvar Alterações" : "Criar Categoria"}
+                                    <Button
+                                        className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                                        onClick={handleSave}
+                                        disabled={isPending}
+                                    >
+                                        {isPending ? "Salvando..." : (editingId ? "Salvar Alterações" : "Criar Categoria")}
                                     </Button>
                                 </div>
                             </div>
@@ -342,7 +403,12 @@ export function CategorySelectionDialog({ currentCategory, onSelect, children, o
                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                             {categories.map((category) => {
                                                 const Icon = category.icon
-                                                const isSelected = category.name === currentCategory
+                                                // Compare ID or Name?
+                                                // Ideally ID. But if old data has strings...
+                                                // `currentCategory` passed in might be ID or Name?
+                                                // TransactionDialog passes `transaction.category_id`?
+                                                // Let's assume it passes ID now.
+                                                const isSelected = category.id === currentCategory
                                                 return (
                                                     <div
                                                         key={category.id}
@@ -375,29 +441,31 @@ export function CategorySelectionDialog({ currentCategory, onSelect, children, o
                                                                     {category.classification}
                                                                 </Badge>
                                                                 <div className="flex items-center gap-1 ml-auto opacity-0 group-hover:opacity-100 transition-opacity">
-                                                                    <Button
-                                                                        variant="ghost"
-                                                                        size="icon"
-                                                                        className="h-6 w-6 text-gray-400 hover:text-blue-500"
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation()
-                                                                            handleEditStart(category)
-                                                                        }}
-                                                                    >
-                                                                        <Edit2 className="h-3 w-3" />
-                                                                    </Button>
-                                                                    {category.id !== "default" && (
-                                                                        <Button
-                                                                            variant="ghost"
-                                                                            size="icon"
-                                                                            className="h-6 w-6 text-gray-400 hover:text-red-500"
-                                                                            onClick={(e) => {
-                                                                                e.stopPropagation()
-                                                                                handleDelete(category)
-                                                                            }}
-                                                                        >
-                                                                            <Trash2 className="h-3 w-3" />
-                                                                        </Button>
+                                                                    {!category.is_default && (
+                                                                        <>
+                                                                            <Button
+                                                                                variant="ghost"
+                                                                                size="icon"
+                                                                                className="h-6 w-6 text-gray-400 hover:text-blue-500"
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation()
+                                                                                    handleEditStart(category)
+                                                                                }}
+                                                                            >
+                                                                                <Edit2 className="h-3 w-3" />
+                                                                            </Button>
+                                                                            <Button
+                                                                                variant="ghost"
+                                                                                size="icon"
+                                                                                className="h-6 w-6 text-gray-400 hover:text-red-500"
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation()
+                                                                                    handleDelete(category)
+                                                                                }}
+                                                                            >
+                                                                                <Trash2 className="h-3 w-3" />
+                                                                            </Button>
+                                                                        </>
                                                                     )}
                                                                 </div>
                                                             </div>

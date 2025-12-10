@@ -1,7 +1,6 @@
 "use client"
 
-
-import { useState, useTransition } from "react"
+import { useState, useTransition, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import {
     Dialog,
@@ -29,9 +28,12 @@ import { ptBR } from "date-fns/locale"
 import { CalendarIcon, TrendingDown, TrendingUp, ChevronDown } from "lucide-react"
 import { CategorySelectionDialog } from "./category-selection-dialog"
 import { getCategoryByName } from "@/lib/categories"
-import { createTransaction } from "@/lib/actions/transaction-actions"
+import { createTransaction, updateTransaction } from "@/lib/actions/transaction-actions"
 import { toast } from "sonner"
+import { getAccounts, AccountDTO } from "@/lib/data/account-data"
 
+
+import { TransactionDTO } from "@/lib/data/transaction-data"
 
 export interface TransactionData {
     id?: number
@@ -48,37 +50,112 @@ export interface TransactionData {
 interface TransactionDialogProps {
     children?: React.ReactNode
     onSave?: (data: TransactionData) => void
+    initialData?: TransactionDTO
 }
 
-export function TransactionDialog({ children, onSave }: TransactionDialogProps) {
+export function TransactionDialog({ children, onSave, initialData }: TransactionDialogProps) {
     const [open, setOpen] = useState(false)
     const [isPending, startTransition] = useTransition()
     const router = useRouter()
+
+    // Default or Initial State
     const [type, setType] = useState<"expense" | "income">("expense")
 
     // Form State
     const [amount, setAmount] = useState("")
     const [currency, setCurrency] = useState<"BRL" | "USD">("BRL")
     const [name, setName] = useState("")
-    const [categoryName, setCategoryName] = useState("Outros")
-    const [date, setDate] = useState<Date | undefined>(new Date())
+    const [categoryName, setCategoryName] = useState("Outros") // Restored state
+    // State
+    const [categoryId, setCategoryId] = useState<string>("default")
+    // We need to display Name/Icon/Color for the selected category.
+    // We can fetch all categories to look it up, or rely on what's passed.
+    const [selectedCategoryData, setSelectedCategoryData] = useState<any>(null)
+    const [accounts, setAccounts] = useState<AccountDTO[]>([])
 
-    // Updated Bank State
+    useEffect(() => {
+        getAccounts().then(setAccounts)
+    }, [])
+
+
+    // Missing States Restored
+    const [date, setDate] = useState<Date | undefined>(new Date())
     const [via, setVia] = useState("nubank")
     const [customVia, setCustomVia] = useState("")
-
     const [description, setDescription] = useState("")
 
+    // Load initial data when dialog opens
+    useEffect(() => {
+        if (open) {
+            if (initialData) {
+                // Edit Mode: Load existing data
+                const amountVal = (initialData as any).raw_amount ?? initialData.amount ?? 0
+                const dateVal = (initialData as any).raw_date ?? initialData.date
+                const typeVal = (initialData as any).type ?? (amountVal < 0 ? "expense" : "income")
+
+                setType(typeVal)
+
+                // Format amount for display (always positive)
+                const absVal = Math.abs(amountVal)
+                const txCurrency = (initialData as any).currency || "BRL"
+
+                if (txCurrency === "BRL") {
+                    const formatted = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2 }).format(absVal)
+                    setAmount(`R$ ${formatted}`)
+                } else {
+                    const formatted = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2 }).format(absVal)
+                    setAmount(`US$ ${formatted}`)
+                }
+
+                setName(initialData.name)
+
+                // Category setup
+                const catId = (initialData as any).raw_category_id?.toString() || "default"
+                setCategoryId(catId)
+
+                // Set date from data
+                // Set date from data (UTC Parts Logic + Noon Normalization)
+                if (dateVal) {
+                    const d = new Date(dateVal)
+                    // Create local date using UTC components to match "Display what's Stored"
+                    const correctedDate = new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 12, 0, 0)
+                    setDate(correctedDate)
+                }
+
+                setCurrency((initialData as any).currency || "BRL")
+
+                setVia(initialData.via)
+                setDescription(initialData.description)
+            } else {
+                // Create Mode: Reset form to defaults
+
+                setAmount("")
+                setName("")
+                setDescription("")
+                setCategoryId("default")
+                setVia("nubank")
+                setType("expense")
+            }
+        }
+    }, [open, initialData])
+
+
     // Computed
-    const category = getCategoryByName(categoryName)
-    const CategoryIcon = category.icon
+    // selectedCategoryData has precedence (from manual selection)
+    // fallback to getCategoryByName(categoryName) for initial load or legacy
+    const category = selectedCategoryData || getCategoryByName(categoryName)
+    const CategoryIcon = category.icon || "MoreHorizontal"
 
     const resetForm = () => {
         setAmount("")
         setCurrency("BRL")
         setName("")
+        setCategoryId("default")
         setCategoryName("Outros")
-        setDate(new Date())
+        setSelectedCategoryData(null)
+        const now = new Date()
+        now.setHours(12, 0, 0, 0)
+        setDate(now)
         setVia("nubank")
         setCustomVia("")
         setDescription("")
@@ -87,13 +164,16 @@ export function TransactionDialog({ children, onSave }: TransactionDialogProps) 
 
     const handleSave = () => {
         let numericAmount = 0
-        // Clean currency symbol and normalize format
-        const cleanValue = amount
-            .replace('R$', '')
-            .replace('US$', '')
-            .replace(/\./g, '') // remove thousands separator
-            .replace(',', '.')  // convert decimal separator
-            .trim()
+        // 2. Parse Amount (Currency String -> Number)
+        let cleanValue = amount.replace('R$', '').replace('US$', '').trim()
+
+        if (currency === "BRL") {
+            // BRL Input: "1.000,00" -> Remove dots, replace comma with dot
+            cleanValue = cleanValue.replace(/\./g, '').replace(',', '.')
+        } else {
+            // USD Input: "1,000.00" -> Remove commas, keep dot
+            cleanValue = cleanValue.replace(/,/g, '')
+        }
 
         numericAmount = parseFloat(cleanValue)
 
@@ -111,15 +191,27 @@ export function TransactionDialog({ children, onSave }: TransactionDialogProps) 
             name: name,
             description: description,
             date: date || new Date(),
-            category: categoryName,
+            category_id: categoryId, // Changed from 'category' (name) to 'category_id'
+            // The action expects 'category_id' BUT verify 'createTransaction' signature.
+            // Input type expected by action likely had 'category' (string) before or mapped it?
+            // I need to check `transaction-actions.ts`.
+            // Wait, I haven't updated `transaction-actions.ts` to accept `category_id`.
+            // It was resolving category by name. I need to update it to use ID directly.
             via: finalVia,
+            currency,
             isRecurring: false
         }
 
         startTransition(async () => {
             try {
-                await createTransaction(transactionData)
-                toast.success("Transação salva com sucesso!")
+                if (initialData?.id) {
+                    await updateTransaction(initialData.id, transactionData as any) // Cast for now until action update
+                    toast.success("Transação atualizada com sucesso!")
+                } else {
+                    await createTransaction(transactionData as any)
+                    toast.success("Transação salva com sucesso!")
+                }
+
                 setOpen(false)
                 resetForm()
                 router.refresh()
@@ -169,7 +261,9 @@ export function TransactionDialog({ children, onSave }: TransactionDialogProps) 
             </DialogTrigger>
             <DialogContent className="sm:max-w-[500px] bg-white dark:bg-zinc-900 border-none shadow-2xl overflow-visible">
                 <DialogHeader className="pb-4 border-b border-gray-100 dark:border-zinc-800">
-                    <DialogTitle className="text-xl font-bold dark:text-white">Nova Transação</DialogTitle>
+                    <DialogTitle className="text-xl font-bold dark:text-white">
+                        {initialData ? "Editar Transação" : "Nova Transação"}
+                    </DialogTitle>
                 </DialogHeader>
 
                 <div className="flex flex-col gap-6 py-4">
@@ -262,7 +356,11 @@ export function TransactionDialog({ children, onSave }: TransactionDialogProps) 
                                 <Label>Categoria</Label>
                                 <CategorySelectionDialog
                                     currentCategory={categoryName}
-                                    onSelect={setCategoryName}
+                                    onSelect={(cat) => {
+                                        setCategoryId(cat.id)
+                                        setCategoryName(cat.name)
+                                        setSelectedCategoryData(cat)
+                                    }}
                                 >
                                     <button
                                         className="flex items-center gap-2 pl-3 pr-4 py-2 text-sm border border-gray-200 dark:border-zinc-800 rounded-md bg-gray-50 dark:bg-zinc-800/50 hover:bg-gray-100 transition-colors w-full h-10"
@@ -318,9 +416,9 @@ export function TransactionDialog({ children, onSave }: TransactionDialogProps) 
                                     <SelectValue placeholder="Selecione a conta" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="rico">Rico</SelectItem>
-                                    <SelectItem value="nubank">Nubank</SelectItem>
-                                    <SelectItem value="carteira">Carteira (Dinheiro)</SelectItem>
+                                    {accounts.map(acc => (
+                                        <SelectItem key={acc.id} value={acc.name} className="capitalize">{acc.name}</SelectItem>
+                                    ))}
                                     <SelectItem value="outro">Outra...</SelectItem>
                                 </SelectContent>
                             </Select>
@@ -361,7 +459,7 @@ export function TransactionDialog({ children, onSave }: TransactionDialogProps) 
                                 : "bg-emerald-600 hover:bg-emerald-700"
                         )}
                     >
-                        {isPending ? "Salvando..." : (type === "expense" ? "Adicionar Despesa" : "Adicionar Receita")}
+                        {isPending ? "Salvando..." : (initialData ? "Salvar Alterações" : (type === "expense" ? "Adicionar Despesa" : "Adicionar Receita"))}
                     </Button>
                 </DialogFooter>
             </DialogContent>

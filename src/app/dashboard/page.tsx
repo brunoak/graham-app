@@ -1,11 +1,12 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
-import { SummaryCards } from "@/components/dashboard/summary-cards"
+import { DashboardSummary } from "@/components/dashboard/dashboard-summary"
 import { RevenueWidget } from "@/components/dashboard/revenue-widget"
 import { TransactionsTable } from "@/components/transactions/transactions-table"
 import { ArkadWidget } from "@/components/dashboard/arkad-widget"
 import { InvestmentsOverview } from "@/components/dashboard/investments-overview"
-import { getFinancialSummary, getTransactions } from "@/lib/data/transaction-data"
+import { getFinancialSummary, getMonthlyHistory, getCategoryBreakdown } from "@/lib/data/dashboard-data"
+import { getTransactions } from "@/lib/data/transaction-data"
 
 export default async function DashboardPage() {
     const supabase = await createClient()
@@ -18,8 +19,10 @@ export default async function DashboardPage() {
         redirect("/login")
     }
 
-    const summary = await getFinancialSummary()
-    const transactions = await getTransactions(5)
+    // const summary = await getFinancialSummary() // Moved to DashboardSummary component
+    const monthlyHistory = await getMonthlyHistory()
+    const categoryBreakdown = await getCategoryBreakdown()
+    const { data: transactions } = await getTransactions(1, 5)
 
     return (
         <div className="space-y-6">
@@ -28,18 +31,17 @@ export default async function DashboardPage() {
             </div>
 
             {/* Top Cards */}
-            <SummaryCards
-                balance={summary.balance}
-                income={summary.income}
-                expenses={summary.expenses}
-                investments={summary.investments}
-            />
+            {/* Top Cards */}
+            <DashboardSummary />
 
             {/* Main Content Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
                 {/* Row 1: Revenue & Arkad */}
-                <RevenueWidget />
+                <RevenueWidget
+                    monthlyData={monthlyHistory}
+                    categoryData={categoryBreakdown}
+                />
                 <ArkadWidget />
 
                 {/* Row 2: Investments */}

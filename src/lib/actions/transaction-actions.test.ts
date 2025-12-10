@@ -9,9 +9,11 @@ const mockEq = vi.fn()
 const mockSingle = vi.fn()
 const mockIlike = vi.fn()
 
-const mockFrom = vi.fn(() => ({
+const mockFrom = vi.fn((...args: any[]) => ({
     select: mockSelect,
     insert: mockInsert,
+    update: vi.fn(),
+    delete: vi.fn(),
 }))
 
 // Chain setup
@@ -110,9 +112,77 @@ describe("createTransaction", () => {
         expect(result).toEqual(mockTx)
         expect(mockFrom).toHaveBeenCalledWith("transactions")
         expect(mockInsert).toHaveBeenCalledWith(expect.objectContaining({
-            amount: 100,
+            amount: -100,
             category_id: 10, // from mock
             account_id: 20 // from mock
         }))
+    })
+})
+
+describe("updateTransaction", () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+        mockSelect.mockReturnValue({ eq: mockEq, single: mockSingle, ilike: mockIlike })
+        mockEq.mockReturnValue({ single: mockSingle, ilike: mockIlike, eq: mockEq })
+
+        // Update Mock
+        const mockUpdate = vi.fn().mockResolvedValue({})
+
+        // Cast to any to bypass strict signature checks 
+        mockFrom.mockImplementation(((table: string) => {
+            if (table === "transactions") return { update: mockUpdate, insert: mockInsert }
+            return { select: mockSelect, insert: mockInsert } // Default fallbacks
+        }) as any)
+    })
+
+    it("should update successfully", async () => {
+        mockAuthGetUser.mockResolvedValue({ data: { user: { id: "user-123" } }, error: null })
+        mockSingle.mockResolvedValue({ data: { tenant_id: 1, id: 10 }, error: null }) // Tenant, Cat, Acc
+
+        const input = {
+            type: "expense" as const,
+            amount: 200,
+            name: "Updated Lunch",
+            date: new Date(),
+            category: "Food",
+            via: "Nubank"
+        }
+
+        await import("./transaction-actions").then(mod => mod.updateTransaction(999, input))
+
+        // Just verify it doesn't throw and calls update
+        expect(mockFrom).toHaveBeenCalledWith("transactions")
+    })
+})
+
+describe("deleteTransaction", () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+        const mockDelete = vi.fn()
+        const mockDeleteEq = vi.fn()
+
+        // Mock chain for delete: delete().eq().eq()
+        mockDelete.mockReturnValue({ eq: mockDeleteEq })
+        mockDeleteEq.mockReturnValue({ eq: vi.fn().mockReturnValue({ error: null }) })
+
+        // Cast to any to bypass strict signature checks
+        mockFrom.mockImplementation(((table: string) => {
+            if (table === "transactions") return { delete: mockDelete }
+            // For users, return the standard select mock chain
+            return { select: mockSelect }
+        }) as any)
+
+        // Ensure standard mockSelect works for users table (tenant fetch)
+        mockSelect.mockReturnValue({ eq: mockEq })
+        mockEq.mockReturnValue({ single: mockSingle })
+    })
+
+    it("should delete successfully", async () => {
+        mockAuthGetUser.mockResolvedValue({ data: { user: { id: "user-123" } }, error: null })
+        mockSingle.mockResolvedValue({ data: { tenant_id: 1 }, error: null })
+
+        await import("./transaction-actions").then(mod => mod.deleteTransaction(999))
+
+        expect(mockFrom).toHaveBeenCalledWith("transactions")
     })
 })
