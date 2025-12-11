@@ -183,8 +183,8 @@ export function TransactionsTable({ mode = "default", transactions: initialTrans
 
     if (mode === "widget") {
         return (
-            <Card className="col-span-12 bg-white dark:bg-zinc-900 border-none shadow-sm shadow-gray-200 dark:shadow-none h-full">
-                <CardHeader className="flex flex-row items-center justify-between pb-4">
+            <Card className="col-span-12 bg-white dark:bg-zinc-900 border-none shadow-sm shadow-gray-200 dark:shadow-none h-full pt-4 pb-0 gap-0">
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
                     <CardTitle className="text-lg font-semibold text-gray-900 dark:text-white">Últimas movimentações</CardTitle>
                     <Link href="/dashboard/transactions">
                         <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-emerald-600">
@@ -196,39 +196,52 @@ export function TransactionsTable({ mode = "default", transactions: initialTrans
                     {/* Desktop View */}
                     <div className="hidden md:block">
                         <Table>
-                            <TableHeader className="bg-transparent">
-                                <TableRow className="border-none hover:bg-transparent">
-                                    <TableHead className="w-[50px] font-semibold text-gray-500 pl-6">Categoria</TableHead>
-                                    <TableHead className="w-[200px] font-semibold text-gray-500">Nome</TableHead>
-                                    <TableHead className="font-semibold text-gray-500">Descrição</TableHead>
-                                    <TableHead className="font-semibold text-gray-500">Data</TableHead>
-                                    <TableHead className="font-semibold text-gray-500">Valor</TableHead>
-                                    <TableHead className="font-semibold text-gray-500">Via</TableHead>
+                            <TableHeader className="bg-emerald-600 hover:bg-emerald-600 sticky top-0 z-10 shadow-sm">
+                                <TableRow className="border-none hover:bg-emerald-600">
+                                    <TableHead className="w-[50px] font-bold text-white pl-6 border-r border-emerald-500/50 text-center">Categoria</TableHead>
+                                    <TableHead className="w-[200px] font-bold text-white text-center border-r border-emerald-500/50">Nome</TableHead>
+                                    <TableHead className="font-bold text-white text-center border-r border-emerald-500/50">Descrição</TableHead>
+                                    <TableHead className="font-bold text-white text-center border-r border-emerald-500/50">Data</TableHead>
+                                    <TableHead className="font-bold text-white text-center border-r border-emerald-500/50">Valor</TableHead>
+                                    <TableHead className="font-bold text-white text-center">Via</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {transactions.map((t) => (
-                                    <TableRow key={t.id} className="border-b border-gray-50 dark:border-zinc-800/50 hover:bg-gray-50 dark:hover:bg-zinc-800/50">
+                                {transactions.map((t, index) => (
+                                    <TableRow
+                                        key={t.id}
+                                        className={`
+                                            border-b border-gray-100 dark:border-zinc-800/50 
+                                            hover:bg-emerald-50/50 dark:hover:bg-emerald-900/10 
+                                            transition-colors
+                                            ${index % 2 === 0
+                                                ? 'bg-white dark:bg-zinc-900'
+                                                : 'bg-gray-50 dark:bg-zinc-800/30'
+                                            }
+                                        `}
+                                    >
                                         <TableCell className="pl-6">
-                                            <CategoryBadge
-                                                categoryName={t.category}
-                                                onUpdate={(newCat) => handleCategoryUpdate(t.id, newCat)}
-                                                size="sm"
-                                                interactive={false}
-                                                iconName={t.categoryIcon}
-                                                color={t.categoryColor}
-                                            />
+                                            <div className="flex justify-center">
+                                                <CategoryBadge
+                                                    categoryName={t.category}
+                                                    onUpdate={(newCat) => handleCategoryUpdate(t.id, newCat)}
+                                                    size="sm"
+                                                    interactive={false}
+                                                    iconName={t.categoryIcon}
+                                                    color={t.categoryColor}
+                                                />
+                                            </div>
                                         </TableCell>
-                                        <TableCell className="font-medium text-gray-700 dark:text-gray-300 max-w-[150px] truncate" title={t.name}>
+                                        <TableCell className="font-medium text-gray-700 dark:text-gray-300 max-w-[150px] truncate text-center" title={t.name}>
                                             {t.name}
                                         </TableCell>
-                                        <TableCell className="text-gray-500 dark:text-gray-400 max-w-[150px] truncate" title={t.description}>{t.description}</TableCell>
-                                        <TableCell className="text-gray-500 dark:text-gray-400">{t.date}</TableCell>
-                                        <TableCell className={`font-medium whitespace-nowrap ${t.value < 0 ? "text-red-500" : "text-emerald-600"}`}>
+                                        <TableCell className="text-gray-500 dark:text-gray-400 max-w-[150px] truncate text-center" title={t.description}>{t.description}</TableCell>
+                                        <TableCell className="text-gray-500 dark:text-gray-400 text-center">{t.date}</TableCell>
+                                        <TableCell className={`font-medium whitespace-nowrap text-center ${t.value < 0 ? "text-red-500" : "text-emerald-600"}`}>
                                             {t.value < 0 ? "- " : "+ "}
                                             {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Math.abs(t.value))}
                                         </TableCell>
-                                        <TableCell className="text-gray-500 dark:text-gray-400 max-w-[100px] truncate" title={t.via}>{t.via}</TableCell>
+                                        <TableCell className="text-gray-500 dark:text-gray-400 max-w-[100px] truncate text-center" title={t.via}>{t.via}</TableCell>
                                     </TableRow>
                                 ))}
                             </TableBody>
@@ -339,49 +352,68 @@ export function TransactionsTable({ mode = "default", transactions: initialTrans
             {/* Desktop View */}
             <div className="hidden md:block">
                 <Table>
-                    <TableHeader className="bg-gray-50/50 dark:bg-zinc-800/50">
-                        <TableRow className="border-none hover:bg-transparent">
-                            <TableHead className="w-[40px] pl-4">
-                                <Checkbox
-                                    checked={selectedRows.length === transactions.length && transactions.length > 0}
-                                    onCheckedChange={handleSelectAll}
-                                />
+                    <TableHeader className="bg-emerald-600 hover:bg-emerald-600 sticky top-0 z-10 shadow-sm">
+                        <TableRow className="border-none hover:bg-emerald-600">
+                            <TableHead className="w-[40px] pl-4 border-r border-emerald-500/50 text-center">
+                                <div className="flex justify-center">
+                                    <Checkbox
+                                        checked={selectedRows.length === transactions.length && transactions.length > 0}
+                                        onCheckedChange={handleSelectAll}
+                                        className="border-white/50 data-[state=checked]:bg-white data-[state=checked]:text-emerald-600"
+                                    />
+                                </div>
                             </TableHead>
-                            <TableHead className="w-[50px] font-semibold text-gray-500">Categoria</TableHead>
-                            <TableHead className="w-[200px] font-semibold text-gray-500">Nome</TableHead>
-                            <TableHead className="font-semibold text-gray-500">Descrição</TableHead>
-                            <TableHead className="font-semibold text-gray-500">Data</TableHead>
-                            <TableHead className="font-semibold text-gray-500">Valor</TableHead>
-                            <TableHead className="font-semibold text-gray-500">Via</TableHead>
+                            <TableHead className="font-bold text-white text-center border-r border-emerald-500/50">Categoria</TableHead>
+                            <TableHead className="w-[200px] font-bold text-white text-center border-r border-emerald-500/50">Nome</TableHead>
+                            <TableHead className="font-bold text-white text-center border-r border-emerald-500/50">Descrição</TableHead>
+                            <TableHead className="font-bold text-white text-center border-r border-emerald-500/50">Data</TableHead>
+                            <TableHead className="font-bold text-white text-center border-r border-emerald-500/50">Valor</TableHead>
+                            <TableHead className="font-bold text-white text-center">Via</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {transactions.map((t) => (
-                            <TableRow key={t.id} className="border-b border-gray-50 dark:border-zinc-800/50 hover:bg-gray-50/50 dark:hover:bg-zinc-800/30">
+                        {transactions.map((t, index) => (
+                            <TableRow
+                                key={t.id}
+                                className={`
+                                    border-b border-gray-100 dark:border-zinc-800/50 
+                                    hover:bg-emerald-50/50 dark:hover:bg-emerald-900/10 
+                                    transition-colors
+                                    ${index % 2 === 0
+                                        ? 'bg-white dark:bg-zinc-900'
+                                        : 'bg-gray-50 dark:bg-zinc-800/30'
+                                    }
+                                `}
+                            >
                                 <TableCell className="pl-4">
-                                    <Checkbox
-                                        checked={selectedRows.includes(t.id)}
-                                        onCheckedChange={() => handleRowSelect(t.id)}
-                                    />
+                                    <div className="flex justify-center">
+                                        <Checkbox
+                                            checked={selectedRows.includes(t.id)}
+                                            onCheckedChange={() => handleRowSelect(t.id)}
+                                            className="border-gray-300 dark:border-zinc-700"
+                                        />
+                                    </div>
                                 </TableCell>
                                 <TableCell>
-                                    <CategoryBadge
-                                        categoryName={t.category}
-                                        onUpdate={(newCat) => handleCategoryUpdate(t.id, newCat)}
-                                        iconName={t.categoryIcon}
-                                        color={t.categoryColor}
-                                    />
+                                    <div className="flex justify-center">
+                                        <CategoryBadge
+                                            categoryName={t.category}
+                                            onUpdate={(newCat) => handleCategoryUpdate(t.id, newCat)}
+                                            iconName={t.categoryIcon}
+                                            color={t.categoryColor}
+                                        />
+                                    </div>
                                 </TableCell>
-                                <TableCell className="font-medium text-gray-700 dark:text-gray-300 max-w-[200px] truncate" title={t.name}>
+                                <TableCell className="font-medium text-gray-700 dark:text-gray-300 max-w-[200px] truncate text-center" title={t.name}>
                                     {t.name}
                                 </TableCell>
-                                <TableCell className="text-gray-500 dark:text-gray-400 max-w-[200px] truncate" title={t.description}>{t.description}</TableCell>
-                                <TableCell className="text-gray-500 dark:text-gray-400">{t.date}</TableCell>
-                                <TableCell className={`font-medium whitespace-nowrap ${t.value < 0 ? "text-red-500" : "text-emerald-600"}`}>
+                                <TableCell className="text-gray-500 dark:text-gray-400 max-w-[200px] truncate text-center" title={t.description}>{t.description}</TableCell>
+                                <TableCell className="text-gray-500 dark:text-gray-400 text-center">{t.date}</TableCell>
+                                <TableCell className={`font-medium whitespace-nowrap text-center ${t.value < 0 ? "text-red-500" : "text-emerald-600"}`}>
                                     {t.value < 0 ? "- " : "+ "}
                                     {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: t.currency || 'BRL' }).format(Math.abs(t.value))}
                                 </TableCell>
-                                <TableCell className="text-gray-500 dark:text-gray-400 max-w-[100px] truncate" title={t.via}>{t.via}</TableCell>
+                                <TableCell className="text-gray-500 dark:text-gray-400 max-w-[100px] truncate text-center" title={t.via}>{t.via}</TableCell>
                             </TableRow>
                         ))}
                     </TableBody>
