@@ -1,188 +1,191 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { createTransaction } from "./transaction-actions"
-import { transactionSchema } from "../schemas/transaction-schema"
+import { createTransaction, updateTransaction, deleteTransaction } from "./transaction-actions"
 
-// Mocks
-const mockInsert = vi.fn()
-const mockSelect = vi.fn()
-const mockEq = vi.fn()
-const mockSingle = vi.fn()
-const mockIlike = vi.fn()
-
-const mockFrom = vi.fn((...args: any[]) => ({
-    select: mockSelect,
-    insert: mockInsert,
-    update: vi.fn(),
-    delete: vi.fn(),
-}))
-
-// Chain setup
-mockInsert.mockReturnValue({ select: mockSelect })
-mockSelect.mockReturnValue({ eq: mockEq, single: mockSingle, ilike: mockIlike })
-mockEq.mockReturnValue({ single: mockSingle, ilike: mockIlike })
-mockIlike.mockReturnValue({ single: mockSingle })
-
-// Supabase Client Mock
+// Supabase Mock Setup
 const mockAuthGetUser = vi.fn()
-const mockSupabase = {
-    auth: { getUser: mockAuthGetUser },
-    from: mockFrom
+
+// Recursive Chain Builder
+const createMockChain = () => {
+    const chain: any = {}
+
+    chain.select = vi.fn().mockReturnValue(chain)
+    chain.insert = vi.fn().mockReturnValue(chain)
+    chain.update = vi.fn().mockReturnValue(chain)
+    chain.delete = vi.fn().mockReturnValue(chain)
+    chain.eq = vi.fn().mockReturnValue(chain)
+    chain.single = vi.fn().mockReturnValue(chain) // Default return, overridden in tests
+    chain.ilike = vi.fn().mockReturnValue(chain)
+    chain.order = vi.fn().mockReturnThis()
+
+    // Alias common entry points
+    chain.from = vi.fn().mockReturnValue(chain)
+    chain.auth = {
+        getUser: mockAuthGetUser
+    }
+
+    return chain
 }
 
+// Global instance to control in tests
+const supabaseMock = createMockChain()
+
 vi.mock("@/lib/supabase/server", () => ({
-    createClient: vi.fn(() => Promise.resolve(mockSupabase))
+    createClient: vi.fn(() => Promise.resolve(supabaseMock))
 }))
 
 vi.mock("next/cache", () => ({
     revalidatePath: vi.fn()
 }))
 
-describe("createTransaction", () => {
+describe("Transaction Actions", () => {
     beforeEach(() => {
         vi.clearAllMocks()
-        // Reset chain returns
-        mockSelect.mockReturnValue({ eq: mockEq, single: mockSingle, ilike: mockIlike })
-        mockEq.mockReturnValue({ single: mockSingle, ilike: mockIlike })
-        mockInsert.mockReturnValue({ select: mockSelect })
+        // Reset default chain behavior (return self)
+        supabaseMock.select.mockReturnValue(supabaseMock)
+        supabaseMock.insert.mockReturnValue(supabaseMock)
+        supabaseMock.update.mockReturnValue(supabaseMock)
+        supabaseMock.delete.mockReturnValue(supabaseMock)
+        supabaseMock.eq.mockReturnValue(supabaseMock)
+        supabaseMock.ilike.mockReturnValue(supabaseMock)
+        supabaseMock.single.mockResolvedValue({ data: null, error: null })
+
+        // Reset from to return the chain
+        supabaseMock.from.mockReturnValue(supabaseMock)
     })
 
-    it("should throw error if user is not authenticated", async () => {
-        mockAuthGetUser.mockResolvedValue({ data: { user: null }, error: new Error("No session") })
+    describe("createTransaction", () => {
+        it("should throw error if user is not authenticated", async () => {
+            mockAuthGetUser.mockResolvedValue({ data: { user: null }, error: new Error("No session") })
+            const input = { type: "expense" as const, amount: 100, name: "Test", date: new Date(), category: "Food", via: "Cash" }
+            await expect(createTransaction(input)).rejects.toThrow("Unauthorized")
+        })
 
-        const input = {
-            type: "expense" as const, // Fix type inference
-            amount: 100,
-            name: "Test",
-            date: new Date(),
-            category: "Food",
-            via: "Cash"
-        }
+        it("should throw error if amount is negative (Zod Validation)", async () => {
+            mockAuthGetUser.mockResolvedValue({ data: { user: { id: "user-123" } }, error: null })
+            const input = { type: "expense" as const, amount: -50, name: "Test", date: new Date(), category: "Food", via: "Cash" }
+            await expect(createTransaction(input)).rejects.toThrow("Dados inválidos")
+        })
 
-        await expect(createTransaction(input)).rejects.toThrow("Unauthorized")
+        it("should create a transaction successfully", async () => {
+            mockAuthGetUser.mockResolvedValue({ data: { user: { id: "user-123" } }, error: null })
+
+            // Sequence of calls: 
+            // 1. Tenant Check (users table)
+            // 2. Category Check (categories table)
+            // 3. Account Check (accounts table)
+            // 4. Insert Transaction (transactions table)
+
+            // We mock .single() to return values in sequence
+            supabaseMock.single
+                .mockResolvedValueOnce({ data: { tenant_id: 1 }, error: null }) // Tenant
+                .mockResolvedValueOnce({ data: { id: 10 }, error: null }) // Category
+                .mockResolvedValueOnce({ data: { id: 20 }, error: null }) // Account
+                .mockResolvedValueOnce({ data: { id: 999, amount: 100 }, error: null }) // Transaction result
+
+            const input = { type: "expense" as const, amount: 100, name: "Lunch", date: new Date(), category: "Food", via: "Nubank" }
+            const result = await createTransaction(input)
+
+            expect(result).toEqual({ id: 999, amount: 100 })
+            // Verify Insert Payload
+            expect(supabaseMock.insert).toHaveBeenCalledWith(expect.objectContaining({
+                amount: -100,
+                category_id: 10,
+                account_id: 20
+            }))
+        })
     })
 
-    it("should throw error if amount is negative (Zod Validation)", async () => {
-        mockAuthGetUser.mockResolvedValue({ data: { user: { id: "user-123" } }, error: null })
+    describe("updateTransaction", () => {
+        it("should update successfully", async () => {
+            mockAuthGetUser.mockResolvedValue({ data: { user: { id: "user-123" } }, error: null })
 
-        const input = {
-            type: "expense" as const,
-            amount: -50,
-            name: "Test",
-            date: new Date(),
-            category: "Food",
-            via: "Cash"
-        }
+            supabaseMock.single
+                .mockResolvedValueOnce({ data: { tenant_id: 1 }, error: null }) // Tenant
+                .mockResolvedValueOnce({ data: { id: 10 }, error: null }) // Category
+                .mockResolvedValueOnce({ data: { id: 20 }, error: null }) // Account
 
-        await expect(createTransaction(input)).rejects.toThrow("Dados inválidos")
+            // Mock the .update().eq().eq().select() chain
+            // The code awaits the result of .select().
+            // Since .single() is NOT called, it returns { data: [T], error }
+
+            const thenableChain: any = {
+                ...supabaseMock,
+                // Critical: select() must return this thenable object so 'await' works on it
+                select: vi.fn(),
+                eq: vi.fn().mockReturnThis(),
+                then: (resolve: any) => resolve({ data: [{ id: 999, name: "Updated" }], error: null })
+            }
+            thenableChain.select.mockReturnValue(thenableChain)
+            thenableChain.eq.mockReturnValue(thenableChain)
+
+            // We need to ensure that the chain returned by .update() eventually leads here
+            supabaseMock.update.mockReturnValue(thenableChain)
+            // And any intermediate .eq() calls also need to keep returning this thenable chain
+
+            const input = { type: "expense" as const, amount: 200, name: "Updated Lunch", date: new Date(), category: "Food", via: "Nubank" }
+
+            await updateTransaction(999, input)
+
+            expect(supabaseMock.from).toHaveBeenCalledWith("transactions")
+            expect(supabaseMock.update).toHaveBeenCalled()
+        })
     })
 
-    it("should create a transaction successfully", async () => {
-        // 1. Auth Success
-        mockAuthGetUser.mockResolvedValue({ data: { user: { id: "user-123" } }, error: null })
+    describe("deleteTransaction", () => {
+        it("should delete successfully", async () => {
+            mockAuthGetUser.mockResolvedValue({ data: { user: { id: "user-123" } }, error: null })
 
-        // 2. Tenant Fetch Success
-        mockSingle.mockResolvedValueOnce({ data: { tenant_id: 1 }, error: null })
-        // Note: The order of mocks depends on execution flow:
-        // 1. .from("users").select(...).eq(...).single() -> Returns tenant
+            // Sequence:
+            // 1. Tenant Check
+            // 2. Delete Transaction (returns array via select() usually, or .single() if used?)
+            //    Code uses .delete()...select() WITHOUT .single() at the end? 
+            //    Let's check code: `.delete()...select()` returns { data: [], error }. 
+            //    It does NOT call single().
 
-        // 3. Category Fetch (Found)
-        // .from("categories")...ilike(...).single()
-        mockSingle.mockResolvedValueOnce({ data: { id: 10 }, error: null })
+            supabaseMock.single.mockResolvedValueOnce({ data: { tenant_id: 1 }, error: null }) // Tenant
 
-        // 4. Account Fetch (Found)
-        // .from("accounts")...ilike(...).single()
-        mockSingle.mockResolvedValueOnce({ data: { id: 20 }, error: null })
+            // For the delete call, select() is the terminator in terms of value return (Promise-like)
+            // But in our chain, methods return 'chain'.
+            // The code awaits the chain. 
+            // To simulate the 'await' result, the implementation must return a Promise.
+            // The logic: supabase...delete()...select() -> Returns Promise<{ data, error }>
 
-        // 5. Transaction Insert
-        // .from("transactions").insert(...).select().single()
-        const mockTx = { id: 999, amount: 100 }
-        mockSingle.mockResolvedValueOnce({ data: mockTx, error: null })
+            // With this recursive mock, `chain.select()` returns `chain`.
+            // Calling `await chain` works if `chain` is a thenable (Promise).
+            // But our chain is an object.
 
-        const input = {
-            type: "expense" as const,
-            amount: 100,
-            name: "Almoço",
-            date: new Date(),
-            category: "Food",
-            via: "Nubank"
-        }
+            // FIX: We need the terminator method to return a Promise-like object OR Make the chain a Promise proxy.
+            // EASIER FIX: Mock the LAST method called in the chain to return the data promise.
+            // In deleteTransaction: `.select()` is the last call.
 
-        const result = await createTransaction(input)
+            // We need to override select implementation conditionally OR make select return a Promise that resolves to {data, error} AND has chain methods?
+            // Complex.
+            // Alternative: The code awaits `supabase...select()`.
+            // So `select()` MUST return a Promise (or be thenable).
 
-        expect(result).toEqual(mockTx)
-        expect(mockFrom).toHaveBeenCalledWith("transactions")
-        expect(mockInsert).toHaveBeenCalledWith(expect.objectContaining({
-            amount: -100,
-            category_id: 10, // from mock
-            account_id: 20 // from mock
-        }))
-    })
-})
+            // Let's make `select` returns a Promise that resolves to { data: [deleted], error: null }
+            // BUT `createTransaction` chains `.select().single()`.
+            // So for create, `select` must return an object with `single`.
 
-describe("updateTransaction", () => {
-    beforeEach(() => {
-        vi.clearAllMocks()
-        mockSelect.mockReturnValue({ eq: mockEq, single: mockSingle, ilike: mockIlike })
-        mockEq.mockReturnValue({ single: mockSingle, ilike: mockIlike, eq: mockEq })
+            // Solution: `select` returns an object that matches BOTH needs?
+            // 1. Has `.single()` method.
+            // 2. Is thenable (has `.then`) -> acts as Promise.
 
-        // Update Mock
-        const mockUpdate = vi.fn().mockResolvedValue({})
+            const thenableChain = {
+                ...supabaseMock,
+                then: (resolve: any) => resolve({ data: [{ id: 999 }], error: null }),
+                single: vi.fn(), // If single is called, it returns promise (mocked below)
+                eq: vi.fn().mockReturnThis()
+            }
+            // Bind recursiveness
+            thenableChain.single.mockReturnValue(Promise.resolve({ data: { id: 999 }, error: null }))
 
-        // Cast to any to bypass strict signature checks 
-        mockFrom.mockImplementation(((table: string) => {
-            if (table === "transactions") return { update: mockUpdate, insert: mockInsert }
-            return { select: mockSelect, insert: mockInsert } // Default fallbacks
-        }) as any)
-    })
+            // Override select for this test
+            supabaseMock.select.mockReturnValue(thenableChain)
 
-    it("should update successfully", async () => {
-        mockAuthGetUser.mockResolvedValue({ data: { user: { id: "user-123" } }, error: null })
-        mockSingle.mockResolvedValue({ data: { tenant_id: 1, id: 10 }, error: null }) // Tenant, Cat, Acc
+            await deleteTransaction(999)
 
-        const input = {
-            type: "expense" as const,
-            amount: 200,
-            name: "Updated Lunch",
-            date: new Date(),
-            category: "Food",
-            via: "Nubank"
-        }
-
-        await import("./transaction-actions").then(mod => mod.updateTransaction(999, input))
-
-        // Just verify it doesn't throw and calls update
-        expect(mockFrom).toHaveBeenCalledWith("transactions")
-    })
-})
-
-describe("deleteTransaction", () => {
-    beforeEach(() => {
-        vi.clearAllMocks()
-        const mockDelete = vi.fn()
-        const mockDeleteEq = vi.fn()
-
-        // Mock chain for delete: delete().eq().eq()
-        mockDelete.mockReturnValue({ eq: mockDeleteEq })
-        mockDeleteEq.mockReturnValue({ eq: vi.fn().mockReturnValue({ error: null }) })
-
-        // Cast to any to bypass strict signature checks
-        mockFrom.mockImplementation(((table: string) => {
-            if (table === "transactions") return { delete: mockDelete }
-            // For users, return the standard select mock chain
-            return { select: mockSelect }
-        }) as any)
-
-        // Ensure standard mockSelect works for users table (tenant fetch)
-        mockSelect.mockReturnValue({ eq: mockEq })
-        mockEq.mockReturnValue({ single: mockSingle })
-    })
-
-    it("should delete successfully", async () => {
-        mockAuthGetUser.mockResolvedValue({ data: { user: { id: "user-123" } }, error: null })
-        mockSingle.mockResolvedValue({ data: { tenant_id: 1 }, error: null })
-
-        await import("./transaction-actions").then(mod => mod.deleteTransaction(999))
-
-        expect(mockFrom).toHaveBeenCalledWith("transactions")
+            expect(supabaseMock.delete).toHaveBeenCalled()
+        })
     })
 })

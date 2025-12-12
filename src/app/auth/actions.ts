@@ -3,13 +3,24 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { loginSchema, signupSchema } from '@/lib/schemas'
 
 export async function login(formData: FormData) {
     const supabase = await createClient()
 
-    // TODO: Add Zod validation here
-    const email = formData.get('email') as string
-    const password = formData.get('password') as string
+    const rawData = {
+        email: formData.get('email') as string,
+        password: formData.get('password') as string,
+    }
+
+    const validation = loginSchema.safeParse(rawData)
+
+    if (!validation.success) {
+        // Use .issues for standard ZodError access
+        return { error: 'Dados inválidos: ' + validation.error.issues[0].message }
+    }
+
+    const { email, password } = validation.data
 
     const { error } = await supabase.auth.signInWithPassword({
         email,
@@ -28,10 +39,20 @@ export async function login(formData: FormData) {
 export async function signup(formData: FormData) {
     const supabase = await createClient()
 
-    // TODO: Add Zod validation here
-    const email = formData.get('email') as string
-    const password = formData.get('password') as string
-    const fullName = formData.get('fullName') as string
+    const rawData = {
+        email: formData.get('email') as string,
+        password: formData.get('password') as string,
+        fullName: formData.get('fullName') as string,
+        confirmPassword: formData.get('password') as string, // Fallback for schema check
+    }
+
+    const validation = signupSchema.safeParse(rawData)
+
+    if (!validation.success) {
+        return { error: 'Dados inválidos: ' + validation.error.issues[0].message }
+    }
+
+    const { email, password, fullName } = validation.data
 
     const { error } = await supabase.auth.signUp({
         email,

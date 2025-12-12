@@ -151,7 +151,7 @@ export function CategorySelectionDialog({ currentCategory, onSelect, children, o
                     name: formData.name,
                     description: formData.description,
                     type: formData.type,
-                    classification: formData.classification,
+                    classification: formData.classification as any,
                     icon: formData.iconName,
                     color: formData.color
                 }

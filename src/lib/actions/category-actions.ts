@@ -3,21 +3,13 @@
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 
-export interface CategoryDTO {
-    id?: string
-    name: string
-    description?: string
-    type: string
-    classification: string
-    icon: string
-    color: string
-}
+import { categorySchema, CategoryInput } from "@/lib/schemas/category-schema"
+
+export type CategoryDTO = CategoryInput & { id?: string }
 
 export async function getCategories() {
     const supabase = await createClient()
 
-    // Query combines defaults (is_default=true) AND user's tenant categories
-    // The RLS policy should handle the filtering, but explicit filter is safer for logic
     const { data, error } = await supabase
         .from('categories')
         .select('*')
@@ -32,6 +24,12 @@ export async function getCategories() {
 }
 
 export async function createCategory(data: CategoryDTO) {
+    const validation = categorySchema.safeParse(data)
+    if (!validation.success) {
+        throw new Error(`Dados inválidos: ${validation.error.issues[0].message}`)
+    }
+
+    const validData = validation.data
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
 
@@ -48,12 +46,12 @@ export async function createCategory(data: CategoryDTO) {
         .insert({
             id: newId,
             tenant_id: profile.tenant_id,
-            name: data.name,
-            description: data.description,
-            type: data.type,
-            classification: data.classification,
-            icon: data.icon,
-            color: data.color,
+            name: validData.name,
+            description: validData.description,
+            type: validData.type,
+            classification: validData.classification,
+            icon: validData.icon,
+            color: validData.color,
             is_default: false
         })
 
@@ -67,23 +65,30 @@ export async function createCategory(data: CategoryDTO) {
 }
 
 export async function updateCategory(id: string, data: CategoryDTO) {
+    // For update, we might want partial validation? 
+    // But the UI usually sends the full object. DTO implies full object.
+    const validation = categorySchema.safeParse(data)
+    if (!validation.success) {
+        throw new Error(`Dados inválidos: ${validation.error.issues[0].message}`)
+    }
+
+    const validData = validation.data
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error("Unauthorized")
 
-    // Security: RLS will block update if not owner, but good to wrap
     const { error } = await supabase
         .from('categories')
         .update({
-            name: data.name,
-            description: data.description,
-            type: data.type,
-            classification: data.classification,
-            icon: data.icon,
-            color: data.color
+            name: validData.name,
+            description: validData.description,
+            type: validData.type,
+            classification: validData.classification,
+            icon: validData.icon,
+            color: validData.color
         })
         .eq('id', id)
-        .eq('is_default', false) // Prevent editing defaults just in case
+        .eq('is_default', false)
 
     if (error) {
         console.error("Error updating category:", error)
