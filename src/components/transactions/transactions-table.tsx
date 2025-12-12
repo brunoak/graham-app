@@ -128,29 +128,60 @@ export function TransactionsTable({ mode = "default", transactions: initialTrans
     }
 
     const handleAddTransaction = (newTx: any) => {
-        const id = Math.max(...data.map(d => d.id), 0) + 1
-        const value = newTx.type === "expense" ? -Math.abs(newTx.amount) : Math.abs(newTx.amount)
-        const dateStr = format(newTx.date, "d 'de' MMM", { locale: ptBR })
+        // Use ID from newTx if available (from dialog update)
+        // If not, use fallback logic for numeric mock (Math.max)
+        const id = newTx.id || (Math.max(...data.map(d => d.id), 0) + 1)
 
-        setData(prev => [{
-            id,
-            category: newTx.category,
-            name: newTx.name,
-            description: newTx.description,
-            date: dateStr,
-            value,
-            amount: Math.abs(newTx.amount),
-            via: newTx.via === "conta_corrente" ? "Conta" : newTx.via, // Simple mapping
-            status: "completed",
-            // Visuals
-            categoryIcon: newTx.categoryIcon,
-            categoryColor: newTx.categoryColor,
-            // Raw fields for Editing
-            raw_date: newTx.date.toISOString(),
-            raw_amount: Math.abs(newTx.amount),
-            raw_category_id: newTx.categoryId,
-            type: newTx.type
-        }, ...prev])
+        const value = newTx.type === "expense" ? -Math.abs(newTx.amount) : Math.abs(newTx.amount)
+        // Ensure date object for formatting
+        const txDate = newTx.date instanceof Date ? newTx.date : new Date(newTx.date)
+        const dateStr = format(txDate, "d 'de' MMM", { locale: ptBR })
+
+        setData(prev => {
+            const exists = prev.find(t => t.id === id)
+            if (exists) {
+                // UPDATE existing
+                return prev.map(t => t.id === id ? {
+                    ...t,
+                    // update fields
+                    category: newTx.category,
+                    name: newTx.name,
+                    description: newTx.description,
+                    date: dateStr,
+                    value,
+                    amount: Math.abs(newTx.amount),
+                    via: newTx.via === "conta_corrente" ? "Conta" : newTx.via,
+                    status: "completed",
+                    categoryIcon: newTx.categoryIcon,
+                    categoryColor: newTx.categoryColor,
+                    raw_date: txDate.toISOString(),
+                    raw_amount: Math.abs(newTx.amount),
+                    raw_category_id: newTx.categoryId,
+                    type: newTx.type,
+                    currency: newTx.currency // Ensure currency persistent
+                } : t)
+            } else {
+                // CREATE new
+                return [{
+                    id,
+                    category: newTx.category,
+                    name: newTx.name,
+                    description: newTx.description,
+                    date: dateStr,
+                    value,
+                    amount: Math.abs(newTx.amount),
+                    via: newTx.via === "conta_corrente" ? "Conta" : newTx.via,
+                    status: "completed",
+                    categoryIcon: newTx.categoryIcon,
+                    categoryColor: newTx.categoryColor,
+                    raw_date: txDate.toISOString(),
+                    raw_amount: Math.abs(newTx.amount),
+                    raw_category_id: newTx.categoryId,
+                    type: newTx.type,
+                    currency: newTx.currency
+                }, ...prev]
+            }
+        })
     }
 
     const handleDeleteRows = async () => {

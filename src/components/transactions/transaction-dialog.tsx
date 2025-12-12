@@ -27,13 +27,14 @@ import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { CalendarIcon, TrendingDown, TrendingUp, ChevronDown } from "lucide-react"
 import { CategorySelectionDialog } from "./category-selection-dialog"
-import { getCategoryByName } from "@/lib/categories"
+
+import { getCategoryByName, AVAILABLE_ICONS } from "@/lib/categories"
 import { createTransaction, updateTransaction } from "@/lib/actions/transaction-actions"
 import { toast } from "sonner"
 import { getAccounts, AccountDTO } from "@/lib/data/account-data"
-
-
 import { TransactionDTO } from "@/lib/data/transaction-data"
+
+
 
 export interface TransactionData {
     id?: number
@@ -112,6 +113,18 @@ export function TransactionDialog({ children, onSave, initialData }: Transaction
                 // Category setup
                 const catId = (initialData as any).raw_category_id?.toString() || "default"
                 setCategoryId(catId)
+                setCategoryName(initialData.category)
+                // Initialize selectedCategoryData to preserve Icon/Color for optimistic updates
+                const initialIconName = (initialData as any).categoryIcon || "MoreHorizontal"
+                const ResolvedIcon = AVAILABLE_ICONS[initialIconName as keyof typeof AVAILABLE_ICONS] || AVAILABLE_ICONS.MoreHorizontal
+
+                setSelectedCategoryData({
+                    id: catId,
+                    name: initialData.category,
+                    icon: ResolvedIcon, // Component for Render
+                    iconName: initialIconName, // String for Save
+                    color: (initialData as any).categoryColor
+                })
 
                 // Set date from data
                 // Set date from data (UTC Parts Logic + Noon Normalization)
@@ -204,12 +217,39 @@ export function TransactionDialog({ children, onSave, initialData }: Transaction
 
         startTransition(async () => {
             try {
+                let savedData: any = { ...transactionData };
+
                 if (initialData?.id) {
-                    await updateTransaction(initialData.id, transactionData as any) // Cast for now until action update
+                    await updateTransaction(initialData.id, transactionData as any)
                     toast.success("Transação atualizada com sucesso!")
+                    savedData.id = initialData.id;
                 } else {
-                    await createTransaction(transactionData as any)
+                    const createdTx = await createTransaction(transactionData as any)
                     toast.success("Transação salva com sucesso!")
+                    savedData.id = createdTx.id; // Use real ID from server
+                }
+
+                // Resolve correct icon string name
+                let finalIconName = "MoreHorizontal"
+                if ((category as any).iconName) {
+                    finalIconName = (category as any).iconName
+                } else if (typeof category.icon === 'string') {
+                    finalIconName = category.icon
+                } else {
+                    // Reverse lookup for static categories
+                    const foundEntry = Object.entries(AVAILABLE_ICONS).find(([_, IconComp]) => IconComp === category.icon)
+                    if (foundEntry) finalIconName = foundEntry[0]
+                }
+
+                // Call onSave to update Parent UI (Optimistic/Local update)
+                if (onSave) {
+                    onSave({
+                        ...savedData,
+                        category: categoryName, // UI Name
+                        categoryIcon: finalIconName, // UI Icon String
+                        categoryColor: category.color, // UI Color
+                        categoryId: categoryId,
+                    })
                 }
 
                 setOpen(false)
