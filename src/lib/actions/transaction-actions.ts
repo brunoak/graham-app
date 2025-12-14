@@ -73,7 +73,7 @@ export async function createTransaction(input: TransactionInput) {
                     tenant_id: tenantId,
                     name: data.category,
                     type: data.type,
-                    classification: "Despesa", // Default
+                    classification: data.type === 'income' ? 'Receita' : 'Despesa',
                     icon: "MoreHorizontal", // Default
                     is_default: false
                 })

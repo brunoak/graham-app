@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { InvestmentsContent } from "@/components/investments/investments-content"
 import { DashboardSummary } from "@/components/dashboard/dashboard-summary"
+import { getAssets, getInvestedCapitalHistory, getDividendHistory } from "@/lib/actions/investment-actions"
 
 export default async function InvestmentsPage() {
     const supabase = await createClient()
@@ -14,5 +15,18 @@ export default async function InvestmentsPage() {
         redirect("/login")
     }
 
-    return <InvestmentsContent summary={<DashboardSummary />} />
+    const [assets, history, dividends] = await Promise.all([
+        getAssets(),
+        getInvestedCapitalHistory(),
+        getDividendHistory()
+    ])
+
+    return (
+        <InvestmentsContent
+            summary={<DashboardSummary />}
+            initialAssets={assets}
+            historyData={history}
+            dividendData={dividends}
+        />
+    )
 }

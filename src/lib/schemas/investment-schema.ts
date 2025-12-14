@@ -12,8 +12,12 @@ export const assetTypeEnum = z.enum([
     "etf_br",     // ETFs Brasil
     "etf_us",     // ETFs EUA
     "crypto",     // Criptomoedas
-    "fixed_income", // Renda Fixa
+    "fixed_income", // Renda Fixa BR
+    "fixed_income_us", // Renda Fixa EUA
     "treasure",   // Tesouro Direto
+    "fund",       // Fundos de Investimento
+    "fiagro",     // FI Agro
+    "fund_exempt", // Fundos Isentos
     "cash"        // Caixa / Conta Corrente
 ])
 
@@ -29,9 +33,12 @@ export const assetSchema = z.object({
     name: z.string().optional(), // Full company name
     type: assetTypeEnum,
     quantity: z.number().nonnegative("Quantity must be positive"),
-    averagePrice: z.number().nonnegative("Average Price must be positive"), // Preço Médio
+    average_price: z.number().nonnegative("Average Price must be positive"), // Preço Médio
     currency: z.enum(["BRL", "USD"]).default("BRL"),
-    lastUpdate: z.date().optional(),
+    last_update: z.date().optional(),
+    updated_at: z.date().optional(),
+    // Optional: Current Price (mocked or fetched)
+    price: z.number().optional()
 })
 
 export type Asset = z.infer<typeof assetSchema>
@@ -43,8 +50,8 @@ export type Asset = z.infer<typeof assetSchema>
 export const quoteSchema = z.object({
     ticker: z.string().toUpperCase(),
     price: z.number(),
-    changePercent: z.number(), // Daily variation %
-    updatedAt: z.date(),
+    change_percent: z.number(), // Daily variation %
+    updated_at: z.date(),
 })
 
 export type Quote = z.infer<typeof quoteSchema>
@@ -54,9 +61,9 @@ export type Quote = z.infer<typeof quoteSchema>
  */
 export const investmentTransactionSchema = z.object({
     id: z.string().uuid().optional(),
-    assetId: z.string().uuid().optional(), // Relation to Asset
+    asset_id: z.string().uuid().optional(), // Relation to Asset
     ticker: z.string().toUpperCase(),
-    type: z.enum(["buy", "sell"]),
+    type: z.enum(["buy", "sell", "dividend"]),
     date: z.date(),
     quantity: z.number().positive(),
     price: z.number().positive(), // Unit price at transaction

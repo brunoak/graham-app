@@ -5,49 +5,91 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useState } from "react"
 
-const data = [
-    { name: "Jan", value: 45000 },
-    { name: "Fev", value: 52000 },
-    { name: "Mar", value: 49000 },
-    { name: "Abr", value: 63000 },
-    { name: "Mai", value: 58000 },
-    { name: "Jun", value: 71000 },
-    { name: "Jul", value: 68000 },
-    { name: "Ago", value: 74000 },
-    { name: "Set", value: 85000 },
-    { name: "Out", value: 92000 },
-    { name: "Nov", value: 105000 },
-    { name: "Dez", value: 123456 },
-]
+interface ProfitabilityChartProps {
+    currency?: string
+    totalValue?: number
+    historyData: { name: string, value: number }[]
+    dividendData: { name: string, value: number, breakdown?: { ticker: string, value: number }[] }[]
+}
 
-export function ProfitabilityChart({ currency = 'BRL' }: { currency?: string }) {
+export function ProfitabilityChart({
+    currency = 'BRL',
+    totalValue = 0,
+    historyData = [],
+    dividendData = []
+}: ProfitabilityChartProps) {
     const { theme } = useTheme()
-    const [period, setPeriod] = useState("1A")
     const [viewMode, setViewMode] = useState<"profitability" | "dividends">("profitability")
 
-    const periods = ["5D", "1M", "3M", "1A", "ALL"]
     const USD_BRL_RATE = 5.50
 
-    // Mock Dividends Data (Monthly Income)
-    const dividendsData = [
-        { name: "Jan", value: 450 },
-        { name: "Fev", value: 520 },
-        { name: "Mar", value: 380 },
-        { name: "Abr", value: 920 }, // Quarterly payment bump
-        { name: "Mai", value: 480 },
-        { name: "Jun", value: 550 },
-        { name: "Jul", value: 510 },
-        { name: "Ago", value: 890 }, // Quarterly payment bump
-        { name: "Set", value: 600 },
-        { name: "Out", value: 650 },
-        { name: "Nov", value: 720 },
-        { name: "Dez", value: 1250 }, // Year end bump
+    const activeRawData = viewMode === "profitability" ? historyData : dividendData
+
+    // Use passed totalValue if available for profitability view, ensuring consistency
+    // Note: The chart area data is still mock, so the tooltip might mismatch the header.
+    // Ideally we would push the real Total Value as the last point in the chart data.
+
+    const isEmpty = activeRawData.length === 0 || activeRawData.every(d => d.value === 0)
+
+    // Header Values Logic
+    // If showing Profitability, show Total Portfolio Value. If Dividends, show Sum of viewed data? Or Last Month?
+    // Usually "Dividends" chart header shows "Total Received in Period" or "Last Month".
+    // Let's show "Total in Period" for Dividends.
+
+    let displayValueRaw = 0
+    let percentage = "+0.0%"
+
+    if (viewMode === "profitability") {
+        displayValueRaw = totalValue
+        // Calc percentage growth of Invested Capital? 
+        // Or just hardcode since it's "Invested" not "Profit" yet.
+        // Let's compare Last vs First point
+        if (historyData.length > 1) {
+            const start = historyData[0].value
+            const end = historyData[historyData.length - 1].value
+            if (start > 0) {
+                const diff = ((end - start) / start) * 100
+                percentage = `${diff >= 0 ? '+' : ''}${diff.toFixed(1)}%`
+            }
+        }
+    } else {
+        // Dividends: Show Sum of 12 months
+        displayValueRaw = dividendData.reduce((acc, curr) => acc + curr.value, 0)
+        // Percentage? Comparison to previous year? We don't have it.
+        // Comparison first vs last month?
+        if (dividendData.length > 1) {
+            const start = dividendData[0].value
+            const end = dividendData[dividendData.length - 1].value
+            if (start > 0) {
+                const diff = ((end - start) / start) * 100
+                percentage = `${diff >= 0 ? '+' : ''}${diff.toFixed(1)}%`
+            }
+        }
+    }
+
+    const displayValue = currency === 'USD' ? displayValueRaw / USD_BRL_RATE : displayValueRaw
+
+
+    // Convert data based on currency (Mock data conversion)
+    // If empty, use placeholder flat/gentle curve data
+    const placeholderData = [
+        { name: "Jan", value: 40 },
+        { name: "Fev", value: 30 },
+        { name: "Mar", value: 20 },
+        { name: "Abr", value: 27 },
+        { name: "Mai", value: 18 },
+        { name: "Jun", value: 23 },
+        { name: "Jul", value: 34 },
+        { name: "Ago", value: 40 },
+        { name: "Set", value: 30 },
+        { name: "Out", value: 50 },
+        { name: "Nov", value: 40 },
+        { name: "Dez", value: 60 },
     ]
 
-    const activeRawData = viewMode === "profitability" ? data : dividendsData
+    const currentData = isEmpty ? placeholderData : activeRawData
 
-    // Convert data based on currency
-    const convertedData = activeRawData.map(item => ({
+    const convertedData = currentData.map(item => ({
         ...item,
         value: currency === 'USD' ? item.value / USD_BRL_RATE : item.value
     }))
@@ -64,15 +106,6 @@ export function ProfitabilityChart({ currency = 'BRL' }: { currency?: string }) 
         const kValue = val / 1000
         return currency === 'BRL' ? `R$${kValue.toFixed(0)}k` : `$${kValue.toFixed(0)}k`
     }
-
-    // Header Values Logic
-    const totalProfitRaw = 1876 // Fixed for Profitability
-    const totalDividendsRaw = dividendsData.reduce((acc, curr) => acc + curr.value, 0) // Sum for Dividends
-
-    const totalValueRaw = viewMode === "profitability" ? totalProfitRaw : totalDividendsRaw
-    const totalValue = currency === 'USD' ? totalValueRaw / USD_BRL_RATE : totalValueRaw
-
-    const percentage = viewMode === "profitability" ? "+15.6%" : "+12.4%" // Mock percentages
 
     return (
         <Card className="col-span-1 border-gray-100 dark:border-zinc-800 bg-white dark:bg-zinc-900 h-[500px]">
@@ -109,18 +142,32 @@ export function ProfitabilityChart({ currency = 'BRL' }: { currency?: string }) 
                 {/* Header Bottom: Value Only */}
                 <div className="flex flex-row items-end justify-between">
                     <div className="flex items-center gap-2">
-                        <span className={`${viewMode === "profitability" ? "text-emerald-500" : "text-blue-500"} font-bold text-2xl tracking-tight`}>
-                            {viewMode === "profitability" ? "+" : ""}{formatValue(totalValue)}
-                        </span>
-                        <span className={`
-                            ${viewMode === "profitability"
-                                ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
-                                : "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
-                            }
-                            text-xs px-2 py-0.5 rounded-full font-medium mb-1
-                        `}>
-                            {percentage}
-                        </span>
+                        {isEmpty ? (
+                            // Skeleton Values
+                            <>
+                                <span className="text-gray-300 dark:text-zinc-700 font-bold text-2xl tracking-tight">
+                                    {formatValue(0)}
+                                </span>
+                                <span className="bg-gray-100 dark:bg-zinc-800 text-gray-400 dark:text-zinc-600 text-xs px-2 py-0.5 rounded-full font-medium mb-1">
+                                    0.0%
+                                </span>
+                            </>
+                        ) : (
+                            <>
+                                <span className={`${viewMode === "profitability" ? "text-emerald-500" : "text-blue-500"} font-bold text-2xl tracking-tight`}>
+                                    {viewMode === "profitability" ? "" : ""}{formatValue(displayValue)}
+                                </span>
+                                <span className={`
+                                    ${viewMode === "profitability"
+                                        ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
+                                        : "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
+                                    }
+                                    text-xs px-2 py-0.5 rounded-full font-medium mb-1
+                                `}>
+                                    {percentage}
+                                </span>
+                            </>
+                        )}
                     </div>
                 </div>
             </CardHeader>
@@ -129,8 +176,16 @@ export function ProfitabilityChart({ currency = 'BRL' }: { currency?: string }) 
                     <AreaChart data={convertedData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                         <defs>
                             <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor={viewMode === "profitability" ? "#10b981" : "#3b82f6"} stopOpacity={0.3} />
-                                <stop offset="95%" stopColor={viewMode === "profitability" ? "#10b981" : "#3b82f6"} stopOpacity={0} />
+                                <stop
+                                    offset="5%"
+                                    stopColor={isEmpty ? "#e5e7eb" : (viewMode === "profitability" ? "#10b981" : "#3b82f6")}
+                                    stopOpacity={0.3}
+                                />
+                                <stop
+                                    offset="95%"
+                                    stopColor={isEmpty ? "#e5e7eb" : (viewMode === "profitability" ? "#10b981" : "#3b82f6")}
+                                    stopOpacity={0}
+                                />
                             </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme === 'dark' ? '#333' : '#eee'} />
@@ -138,29 +193,69 @@ export function ProfitabilityChart({ currency = 'BRL' }: { currency?: string }) 
                             dataKey="name"
                             axisLine={false}
                             tickLine={false}
-                            tick={{ fill: '#888', fontSize: 12 }}
+                            tick={{ fill: isEmpty ? '#d1d5db' : '#888', fontSize: 12 }}
                             dy={10}
                         />
                         <YAxis
                             axisLine={false}
                             tickLine={false}
-                            tick={{ fill: '#888', fontSize: 12 }}
+                            tick={{ fill: isEmpty ? '#d1d5db' : '#888', fontSize: 12 }}
                             tickFormatter={axisFormatter}
                         />
-                        <Tooltip
-                            contentStyle={{
-                                backgroundColor: theme === 'dark' ? '#18181b' : '#fff',
-                                borderColor: theme === 'dark' ? '#27272a' : '#e5e7eb',
-                                borderRadius: '8px',
-                                boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
-                            }}
-                            itemStyle={{ color: viewMode === "profitability" ? '#10b981' : '#3b82f6' }}
-                            formatter={(value: number) => [formatValue(value), viewMode === "profitability" ? 'Valor' : 'Proventos']}
-                        />
+                        {!isEmpty && (
+                            <Tooltip
+                                content={({ active, payload, label }) => {
+                                    if (active && payload && payload.length) {
+                                        const data = payload[0].payload;
+                                        // Retrieve the original breakdown if available
+                                        // "payload.payload" usually contains the original data object passed to Chart
+                                        const breakdown = data.breakdown || [];
+
+                                        return (
+                                            <div className={`rounded-lg shadow-lg border p-3 ${theme === 'dark' ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-gray-100'
+                                                }`}>
+                                                <p className="text-sm font-semibold mb-2 text-gray-900 dark:text-gray-100">{label}</p>
+
+                                                {/* Breakdown List (Only for Dividends view) */}
+                                                {viewMode === "dividends" && breakdown.length > 0 && (
+                                                    <div className="space-y-1 mb-3 border-b border-gray-100 dark:border-zinc-800 pb-2">
+                                                        {breakdown.map((item: any, idx: number) => {
+                                                            // Calculate displayed value based on currency prop logic
+                                                            const val = currency === 'USD' ? item.value / USD_BRL_RATE : item.value
+                                                            return (
+                                                                <div key={idx} className="flex items-center justify-between text-xs gap-4">
+                                                                    <span className="text-gray-500 dark:text-gray-400">{item.ticker}</span>
+                                                                    <span className="font-medium text-gray-700 dark:text-gray-200">
+                                                                        {formatValue(val)}
+                                                                    </span>
+                                                                </div>
+                                                            )
+                                                        })}
+                                                    </div>
+                                                )}
+
+                                                {/* Total Row */}
+                                                <div className="flex items-center justify-between gap-4 mt-2 pt-2 border-t border-gray-100 dark:border-zinc-800">
+                                                    <span className={`text-sm font-bold ${viewMode === "profitability" ? "text-emerald-500" : "text-blue-500"
+                                                        }`}>
+                                                        {viewMode === "profitability" ? "Valor" : "Proventos"}
+                                                    </span>
+                                                    <span className={`text-sm font-bold ${viewMode === "profitability" ? "text-emerald-500" : "text-blue-500"
+                                                        }`}>
+                                                        {formatValue(payload[0].value as number)}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        );
+                                    }
+                                    return null;
+                                }}
+                            />
+                        )}
                         <Area
                             type="monotone"
                             dataKey="value"
-                            stroke={viewMode === "profitability" ? "#10b981" : "#3b82f6"}
+                            stroke={isEmpty ? "#d1d5db" : (viewMode === "profitability" ? "#10b981" : "#3b82f6")}
                             strokeWidth={3}
                             fillOpacity={1}
                             fill="url(#colorValue)"

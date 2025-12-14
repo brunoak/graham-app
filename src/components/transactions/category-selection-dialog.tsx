@@ -143,7 +143,10 @@ export function CategorySelectionDialog({ currentCategory, onSelect, children, o
     }
 
     const handleSave = () => {
-        if (!formData.name) return
+        if (!formData.name) {
+            toast.error("Por favor, digite um nome para a categoria.")
+            return
+        }
 
         startTransition(async () => {
             try {
@@ -160,18 +163,20 @@ export function CategorySelectionDialog({ currentCategory, onSelect, children, o
                     await updateCategory(editingId, payload)
                     toast.success("Categoria atualizada")
                 } else {
-                    const newId = await createCategory(payload)
+                    const result = await createCategory(payload)
+                    if (result && typeof result === 'object' && 'error' in result) {
+                        toast.error(result.error)
+                        return // Stop execution
+                    }
                     toast.success("Categoria criada")
-                    // Auto select?
-                    // onSelect(newId) 
-                    // No, let's just refresh list
                 }
 
                 await loadCategories()
                 setView("list")
                 resetForm()
             } catch (error) {
-                toast.error("Erro ao salvar categoria")
+                const message = error instanceof Error ? error.message : "Erro desconhecido"
+                toast.error(`Erro: ${message}`)
             }
         })
     }

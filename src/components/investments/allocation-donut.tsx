@@ -1,67 +1,19 @@
-"use client"
-
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { useTheme } from "next-themes"
-
-const data = [
-    {
-        name: "Ações",
-        value: 45000.00,
-        color: "#10b981",
-        assets: [
-            { ticker: "VALE3", name: "Vale S.A.", value: 12500.00 },
-            { ticker: "PETR4", name: "Petrobras", value: 8500.00 },
-            { ticker: "ITUB4", name: "Itaú Unibanco", value: 8000.00 },
-            { ticker: "WEGE3", name: "WEG", value: 6000.00 },
-            { ticker: "BBAS3", name: "Banco do Brasil", value: 5000.00 },
-            { ticker: "PRIO3", name: "PetroRio", value: 5000.00 },
-        ]
-    },
-    {
-        name: "FIIs",
-        value: 25000.00,
-        color: "#3b82f6",
-        assets: [
-            { ticker: "HGLG11", name: "CSHG Logística", value: 10000.00 },
-            { ticker: "KNRI11", name: "Kinea Renda", value: 8000.00 },
-            { ticker: "MXRF11", name: "Maxi Renda", value: 7000.00 },
-        ]
-    },
-    {
-        name: "Tesouro",
-        value: 15000.00,
-        color: "#f59e0b",
-        assets: [
-            { ticker: "TD SELIC", name: "Tesouro Selic 2029", value: 10000.00 },
-            { ticker: "TD IPCA+", name: "Tesouro IPCA+ 2035", value: 5000.00 },
-        ]
-    },
-    {
-        name: "ETFs",
-        value: 10000.00,
-        color: "#6366f1",
-        assets: [
-            { ticker: "IVVB11", name: "S&P 500", value: 6000.00 },
-            { ticker: "SMAL11", name: "Small Caps", value: 4000.00 },
-        ]
-    },
-    {
-        name: "Cripto",
-        value: 5000.00,
-        color: "#ec4899",
-        assets: [
-            { ticker: "BTC", name: "Bitcoin", value: 3500.00 },
-            { ticker: "ETH", name: "Ethereum", value: 1500.00 },
-        ]
-    },
-]
-
+import type { Asset } from "@/lib/schemas/investment-schema"
 import { Tooltip as ShadcnTooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
+interface AllocationDonutProps {
+    currency?: string
+    assets: Asset[]
+}
+
 // Helper for Currency Formatting
-const formatCurrency = (value: number, currency: string = 'BRL') =>
-    new Intl.NumberFormat('pt-BR', { style: 'currency', currency }).format(value)
+// Helper for Currency Formatting
+const formatCurrency = (value: number, currency: string = 'BRL') => {
+    const locale = currency === 'USD' ? 'en-US' : 'pt-BR'
+    return new Intl.NumberFormat(locale, { style: 'currency', currency }).format(value)
+}
 
 // Detailed Asset View (Used in Legend Hover)
 const AssetDetails = ({ data, currency = 'BRL' }: { data: any, currency?: string }) => {
@@ -91,39 +43,110 @@ const AssetDetails = ({ data, currency = 'BRL' }: { data: any, currency?: string
 const ChartTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
         const data = payload[0].payload
-        const totalValue = 100000
-        const percent = ((data.value / totalValue) * 100).toFixed(1)
-
+        // We need totalValue here, usually passed or calculated. 
+        // But for tooltip simple view, we might just show value or rely on Pie's internal percent
+        // Let's rely on data passing
         return (
             <div className="bg-popover border border-border p-2 rounded shadow-sm text-sm">
                 <span className="font-semibold text-popover-foreground">{data.name} : </span>
-                <span className="text-muted-foreground">{percent}%</span>
+                <span className="text-muted-foreground">
+                    {formatCurrency(data.convertedValue, data.currency)}
+                </span>
             </div>
         )
     }
     return null
 }
 
-export function AllocationDonut({ currency = 'BRL' }: { currency?: string }) {
-    const totalValue = 100000
+export function AllocationDonut({ currency = 'BRL', assets }: AllocationDonutProps) {
     const USD_BRL_RATE = 5.50
 
-    // Convert data based on selected currency
-    const convertedData = data.map(category => {
-        const isUSD = currency === 'USD'
-        // If converting to USD, divide by rate. If BRL, keep original
-        const rate = isUSD ? (1 / USD_BRL_RATE) : 1
+    // Group assets by type
+    const groups: Record<string, { value: number, assets: any[], color: string, name: string }> = {
+        "Ações": { value: 0, assets: [], color: "#10b981", name: "Ações" },
+        "Ações EUA": { value: 0, assets: [], color: "#059669", name: "Ações EUA" },
+        "FIIs": { value: 0, assets: [], color: "#3b82f6", name: "FIIs" },
+        "REITs": { value: 0, assets: [], color: "#2563eb", name: "REITs" },
+        "Tesouro": { value: 0, assets: [], color: "#f59e0b", name: "Tesouro" },
+        "ETFs": { value: 0, assets: [], color: "#6366f1", name: "ETFs" },
+        "ETFs EUA": { value: 0, assets: [], color: "#4f46e5", name: "ETFs EUA" },
+        "Cripto": { value: 0, assets: [], color: "#ec4899", name: "Cripto" },
+        "Renda Fixa": { value: 0, assets: [], color: "#14b8a6", name: "Renda Fixa" },
+        "Renda Fixa EUA": { value: 0, assets: [], color: "#0d9488", name: "Renda Fixa EUA" },
+        "Fundos": { value: 0, assets: [], color: "#8b5cf6", name: "Fundos" },
+        "Outros": { value: 0, assets: [], color: "#9ca3af", name: "Outros" }
+    }
 
-        return {
-            ...category,
-            value: category.value, // Keep original value for correct percentage calculation (Pie Chart)
-            convertedValue: category.value * rate, // Use this for monetary display
-            assets: category.assets?.map((asset: any) => ({
-                ...asset,
-                value: asset.value * rate
-            }))
+    assets.forEach(asset => {
+        let value = asset.quantity * (asset.price || asset.average_price) // Fallback to avg price if current not avail
+
+        // Normalize value to BRL for grouping calculation if asset is in USD
+        // We will convert to view currency later, but we need a common base for "value" aggregation if we want consistent relative sizes?
+        // Actually, logic below (L99) converts "g.value" based on view currency. 
+        // Best approach: Convert EVERYTHING to the View Currency (props.currency) straight away.
+
+        const assetCurrency = asset.currency || 'BRL'
+
+        if (currency === 'BRL' && assetCurrency === 'USD') {
+            value = value * USD_BRL_RATE
+        } else if (currency === 'USD' && assetCurrency === 'BRL') {
+            value = value / USD_BRL_RATE
         }
+
+        let category = "Outros"
+
+        if (asset.type === "stock_br") category = "Ações"
+        else if (asset.type === "stock_us") category = "Ações EUA"
+        else if (asset.type === "reit_br") category = "FIIs"
+        else if (asset.type === "reit_us") category = "REITs"
+        else if (asset.type === "etf_br") category = "ETFs"
+        else if (asset.type === "etf_us") category = "ETFs EUA"
+        else if (asset.type === "treasure") category = "Tesouro"
+        else if (asset.type === "fixed_income") category = "Renda Fixa"
+        else if (asset.type === "fixed_income_us") category = "Renda Fixa EUA"
+        else if (asset.type === "crypto") category = "Cripto"
+        else if (asset.type === "fund" || asset.type === "fund_exempt" || asset.type === "fiagro") category = "Fundos"
+
+        groups[category].value += value
+        groups[category].assets.push({
+            ticker: asset.ticker,
+            name: asset.name,
+            value: value // This value is now in the VIEW currency
+        })
     })
+
+    // Filter empty groups & Convert
+    const chartData = Object.values(groups)
+        .filter(g => g.value > 0)
+        .map(g => {
+            // Since we already converted "value" to the target currency in the loop, we don't need rate conversion here anymore.
+            // But we keep the structure for compatibility.
+
+            // Sort assets inside group
+            g.assets.sort((a, b) => b.value - a.value)
+
+            return {
+                ...g,
+                value: g.value,
+                convertedValue: g.value, // It's already converted
+                currency: currency,
+                assets: g.assets // Already converted
+            }
+        })
+        .sort((a, b) => b.value - a.value) // Sort types by size
+
+    const totalValue = chartData.reduce((acc, curr) => acc + curr.convertedValue, 0)
+
+    const isEmpty = assets.length === 0
+
+    // Placeholder Data for Skeleton
+    const placeholderData = [
+        { name: "Placeholder A", value: 40, color: "#e5e7eb" }, // Gray-200
+        { name: "Placeholder B", value: 30, color: "#f3f4f6" }, // Gray-100
+        { name: "Placeholder C", value: 30, color: "#d1d5db" }, // Gray-300
+    ]
+
+    const activeData = isEmpty ? placeholderData : chartData
 
     return (
         <Card className="col-span-1 border-gray-100 dark:border-zinc-800 bg-white dark:bg-zinc-900">
@@ -135,7 +158,7 @@ export function AllocationDonut({ currency = 'BRL' }: { currency?: string }) {
                     <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
                             <Pie
-                                data={convertedData}
+                                data={activeData}
                                 cx="50%"
                                 cy="50%"
                                 innerRadius={60}
@@ -143,46 +166,59 @@ export function AllocationDonut({ currency = 'BRL' }: { currency?: string }) {
                                 paddingAngle={2}
                                 dataKey="value"
                                 stroke="none"
+                                isAnimationActive={!isEmpty}
                             >
-                                {convertedData.map((entry, index) => (
+                                {activeData.map((entry, index) => (
                                     <Cell key={`cell-${index}`} fill={entry.color} />
                                 ))}
                             </Pie>
-                            <Tooltip content={<ChartTooltip />} />
+                            {!isEmpty && <Tooltip content={<ChartTooltip />} />}
                         </PieChart>
                     </ResponsiveContainer>
                     {/* Centered Total */}
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                         <div className="text-center">
-                            <span className="text-2xl font-bold text-gray-900 dark:text-white">100%</span>
+                            {isEmpty ? (
+                                <span className="text-2xl font-bold text-gray-300 dark:text-zinc-700">0%</span>
+                            ) : (
+                                <span className="text-2xl font-bold text-gray-900 dark:text-white">100%</span>
+                            )}
                         </div>
                     </div>
                 </div>
 
                 {/* Legend List with Tooltip Hover */}
                 <div className="mt-4 flex flex-col space-y-3 text-sm">
-                    <TooltipProvider delayDuration={0}>
-                        {convertedData.map((item) => {
-                            // Recalculate percent based on total value (which should also be converted or ratio stays same)
-                            // Ratio stays same so we can use original totalValue if we convert it, OR just sum up the converted values.
-                            // Simply usage: ratio is currency agnostic.
-                            const percent = ((item.value / totalValue) * 100).toFixed(0)
-                            return (
-                                <ShadcnTooltip key={item.name}>
-                                    <TooltipTrigger asChild>
-                                        <div className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity">
-                                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color }} />
-                                            <span className="text-gray-600 dark:text-gray-400 flex-1 text-left">{item.name}</span>
-                                            <span className="font-bold text-gray-900 dark:text-gray-200">{percent}%</span>
-                                        </div>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="bottom" align="start" className="bg-popover text-popover-foreground border-border p-3 min-w-[220px]">
-                                        <AssetDetails data={item} currency={currency} />
-                                    </TooltipContent>
-                                </ShadcnTooltip>
-                            )
-                        })}
-                    </TooltipProvider>
+                    {isEmpty ? (
+                        // Skeleton Legend
+                        [1, 2, 3, 4, 5].map((_, i) => (
+                            <div key={i} className="flex items-center gap-2 animate-pulse">
+                                <div className="w-2 h-2 rounded-full bg-gray-200 dark:bg-zinc-800" />
+                                <div className="h-4 w-24 bg-gray-200 dark:bg-zinc-800 rounded" />
+                                <div className="ml-auto h-4 w-8 bg-gray-200 dark:bg-zinc-800 rounded" />
+                            </div>
+                        ))
+                    ) : (
+                        <TooltipProvider delayDuration={0}>
+                            {chartData.map((item) => {
+                                const percent = totalValue > 0 ? ((item.convertedValue / totalValue) * 100).toFixed(0) : "0"
+                                return (
+                                    <ShadcnTooltip key={item.name}>
+                                        <TooltipTrigger asChild>
+                                            <div className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity">
+                                                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color }} />
+                                                <span className="text-gray-600 dark:text-gray-400 flex-1 text-left">{item.name}</span>
+                                                <span className="font-bold text-gray-900 dark:text-gray-200">{percent}%</span>
+                                            </div>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="bottom" align="start" className="bg-popover text-popover-foreground border-border p-3 min-w-[220px]">
+                                            <AssetDetails data={item} currency={currency} />
+                                        </TooltipContent>
+                                    </ShadcnTooltip>
+                                )
+                            })}
+                        </TooltipProvider>
+                    )}
                 </div>
             </CardContent>
         </Card>

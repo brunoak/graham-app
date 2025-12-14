@@ -3,7 +3,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ResponsiveContainer, Treemap, Tooltip as RechartsTooltip } from 'recharts'
 import { useTheme } from "next-themes"
-import { MOCK_INVESTMENTS } from "@/lib/mock-data"
 import { HelpCircle } from "lucide-react"
 import {
     Tooltip,
@@ -11,14 +10,16 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/tooltip"
+import type { Asset } from "@/lib/schemas/investment-schema"
 
 const USD_BRL_RATE = 5.50
 
 interface PortfolioTreemapProps {
     currency?: "BRL" | "USD"
+    assets?: Asset[]
 }
 
-export function PortfolioTreemap({ currency = "BRL" }: PortfolioTreemapProps) {
+export function PortfolioTreemap({ currency = "BRL", assets = [] }: PortfolioTreemapProps) {
     const { theme } = useTheme()
 
     // DATA TRANSFORMATION LOGIC
@@ -28,21 +29,24 @@ export function PortfolioTreemap({ currency = "BRL" }: PortfolioTreemapProps) {
     //    to maximize space usage, or group by Type if desired. 
     //    Let's stick to a flat list under "Portfolio" so boxes sort purely by size.
 
-    const processedAssets = MOCK_INVESTMENTS.map(asset => {
-        let price = asset.currentPrice
-        let avgPrice = asset.avgPrice
+    const processedAssets = assets.map(asset => {
+        // Fallback for current price (using average price -> 0 profit)
+        let price = asset.price || asset.average_price
+        let avgPrice = asset.average_price
 
         // Currency Conversion
-        if (currency === "BRL" && asset.currency === "USD") {
+        const assetCurrency = asset.currency || 'BRL'
+        if (currency === "BRL" && assetCurrency === "USD") {
             price *= USD_BRL_RATE
             avgPrice *= USD_BRL_RATE
-        } else if (currency === "USD" && asset.currency === "BRL") {
+        } else if (currency === "USD" && assetCurrency === "BRL") {
             price /= USD_BRL_RATE
             avgPrice /= USD_BRL_RATE
         }
 
         const totalValue = asset.quantity * price
-        const changePercent = ((price - avgPrice) / avgPrice) * 100
+        // Avoid division by zero
+        const changePercent = avgPrice > 0 ? ((price - avgPrice) / avgPrice) * 100 : 0
 
         return {
             name: asset.ticker, // Display Name
@@ -55,14 +59,28 @@ export function PortfolioTreemap({ currency = "BRL" }: PortfolioTreemapProps) {
         }
     }).filter(a => a.size > 0) // Remove empty positions
 
+    const isEmpty = assets.length === 0
+
+    let activeAssets = processedAssets
+
+    if (isEmpty) {
+        activeAssets = [
+            { name: "P1", size: 50000, type: 'placeholder', ticker: "", price: 0, change: 0, full_name: "" },
+            { name: "P2", size: 30000, type: 'placeholder', ticker: "", price: 0, change: 0, full_name: "" },
+            { name: "P3", size: 15000, type: 'placeholder', ticker: "", price: 0, change: 0, full_name: "" },
+            { name: "P4", size: 10000, type: 'placeholder', ticker: "", price: 0, change: 0, full_name: "" },
+            { name: "P5", size: 5000, type: 'placeholder', ticker: "", price: 0, change: 0, full_name: "" },
+        ] as any
+    }
+
     // Calculate Total Portfolio Value for % calculation
-    const totalPortfolioValue = processedAssets.reduce((acc, curr) => acc + curr.size, 0)
+    const totalPortfolioValue = activeAssets.reduce((acc, curr) => acc + curr.size, 0)
 
     // Prepare Data for Recharts
     const data = [
         {
             name: 'Portfolio',
-            children: processedAssets
+            children: activeAssets
         }
     ]
 
@@ -94,9 +112,10 @@ export function PortfolioTreemap({ currency = "BRL" }: PortfolioTreemapProps) {
                         dataKey="size"
                         aspectRatio={4 / 3}
                         stroke="#fff"
+                        isAnimationActive={!isEmpty}
                         content={<CustomTreeMapContent formatCurrency={formatCurrency} totalValue={totalPortfolioValue} />}
                     >
-                        <RechartsTooltip content={<CustomTooltip formatCurrency={formatCurrency} totalValue={totalPortfolioValue} />} />
+                        {!isEmpty && <RechartsTooltip content={<CustomTooltip formatCurrency={formatCurrency} totalValue={totalPortfolioValue} />} />}
                     </Treemap>
                 </ResponsiveContainer>
             </CardContent>
@@ -162,13 +181,35 @@ const CustomTreeMapContent = (props: any) => {
 
     // DATA ACCESS
     const rawData = payload || props;
+    const assetType = rawData.type || props.type; // Access Type
+
+    // CHECK PLACEHOLDER
+    if (assetType === 'placeholder') {
+        return (
+            <g>
+                <rect
+                    x={x}
+                    y={y}
+                    width={width}
+                    height={height}
+                    style={{
+                        fill: '#e5e7eb', // Gray-200
+                        stroke: '#fff',
+                        strokeWidth: 2,
+                        shapeRendering: 'crispEdges'
+                    }}
+                    className="animate-pulse dark:fill-zinc-800"
+                />
+            </g>
+        )
+    }
+
     let change = rawData.change;
     if (typeof change === 'undefined') change = props.change;
 
     const ticker = rawData.ticker || props.ticker || rawData.name;
     const price = rawData.price || props.price;
     const size = rawData.size || props.size;
-    const assetType = rawData.type || props.type; // Access Type
 
     // Validate
     const hasChange = typeof change !== 'undefined' && change !== null;
@@ -181,7 +222,7 @@ const CustomTreeMapContent = (props: any) => {
 
     if (isLeaf) {
         // Semantic Coloring
-        if (assetType === 'fixed_income' || assetType === 'treasury') {
+        if (assetType === 'fixed_income' || assetType === 'treasure') {
             bgColor = '#6b7280'; // Gray-500 for Fixed Income/Treasury
         } else if (hasChange) {
             // Variable Income (Stocks, FIIs, Crypto, ETFs)

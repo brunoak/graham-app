@@ -92,11 +92,25 @@ export async function getFinancialSummary(date: Date = new Date()): Promise<Fina
     const monthNetFlow = monthIncome - monthExpense
     const startBalance = Number((totalBalance - monthNetFlow).toFixed(2)) // Balance before this month's activity
 
+    // 3. Get Investments Total (Current Position)
+    // Formula: Sum(Quantity * AveragePrice)
+    const { data: assets } = await supabase
+        .from("assets")
+        .select("quantity, average_price")
+        .eq("tenant_id", profile.tenant_id)
+
+    let totalInvestments = 0
+    if (assets) {
+        totalInvestments = assets.reduce((sum, asset) => {
+            return sum + (Number(asset.quantity) * Number(asset.average_price))
+        }, 0)
+    }
+
     return {
         balance: totalBalance,
         income: monthIncome,
         expenses: monthExpense,
-        investments: 0,
+        investments: totalInvestments,
         // Percentages
         balanceChange: calculateChange(totalBalance, startBalance),
         incomeChange: calculateChange(monthIncome, lastMonthIncome),

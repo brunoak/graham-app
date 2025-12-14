@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 
 import { categorySchema, CategoryInput } from "@/lib/schemas/category-schema"
+import { randomUUID } from "crypto"
 
 export type CategoryDTO = CategoryInput & { id?: string }
 
@@ -24,44 +25,51 @@ export async function getCategories() {
 }
 
 export async function createCategory(data: CategoryDTO) {
-    const validation = categorySchema.safeParse(data)
-    if (!validation.success) {
-        throw new Error(`Dados inválidos: ${validation.error.issues[0].message}`)
+    try {
+        const validation = categorySchema.safeParse(data)
+        if (!validation.success) {
+            return { error: `Dados inválidos: ${validation.error.issues[0].message}` }
+        }
+
+        const validData = validation.data
+        const supabase = await createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+
+        if (!user) return { error: "Unauthorized" }
+
+        const { data: profile } = await supabase.from("users").select("tenant_id").eq("id", user.id).single()
+        if (!profile) return { error: "Profile not found" }
+
+        // Generate UUID because DB column is TEXT (confirmed by migration error)
+        const newId = randomUUID()
+
+        const { data: newCategory, error } = await supabase
+            .from('categories')
+            .insert({
+                id: newId,
+                tenant_id: profile.tenant_id,
+                name: validData.name,
+                description: validData.description,
+                type: validData.type,
+                classification: validData.classification,
+                icon: validData.icon,
+                color: validData.color,
+                is_default: false
+            })
+            .select()
+            .single()
+
+        if (error) {
+            console.error("Error creating category:", error)
+            return { error: `Erro SQL: ${error.message} (Code: ${error.code})` }
+        }
+
+        revalidatePath("/dashboard")
+        return { data: newCategory.id.toString() }
+    } catch (e: any) {
+        console.error("Unexpected error:", e)
+        return { error: `Erro inesperado: ${e.message}` }
     }
-
-    const validData = validation.data
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) throw new Error("Unauthorized")
-
-    // Get tenant_id
-    const { data: profile } = await supabase.from("users").select("tenant_id").eq("id", user.id).single()
-    if (!profile) throw new Error("Profile not found")
-
-    const newId = crypto.randomUUID()
-
-    const { error } = await supabase
-        .from('categories')
-        .insert({
-            id: newId,
-            tenant_id: profile.tenant_id,
-            name: validData.name,
-            description: validData.description,
-            type: validData.type,
-            classification: validData.classification,
-            icon: validData.icon,
-            color: validData.color,
-            is_default: false
-        })
-
-    if (error) {
-        console.error("Error creating category:", error)
-        throw new Error("Erro ao criar categoria")
-    }
-
-    revalidatePath("/dashboard")
-    return newId
 }
 
 export async function updateCategory(id: string, data: CategoryDTO) {

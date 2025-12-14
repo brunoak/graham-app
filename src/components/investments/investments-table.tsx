@@ -21,15 +21,16 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { TrendingUp, TrendingDown, DollarSign, Building2, Wallet, Filter, Upload, Plus } from "lucide-react"
 import { AddAssetDialog } from "./add-asset-dialog"
-
-import { MOCK_INVESTMENTS } from "@/lib/mock-data"
+import Link from "next/link"
+import type { Asset } from "@/lib/schemas/investment-schema"
 
 interface InvestmentsTableProps {
     viewCurrency: "BRL" | "USD"
     onViewCurrencyChange: (currency: "BRL" | "USD") => void
+    assets: Asset[]
 }
 
-export function InvestmentsTable({ viewCurrency, onViewCurrencyChange }: InvestmentsTableProps) {
+export function InvestmentsTable({ viewCurrency, onViewCurrencyChange, assets }: InvestmentsTableProps) {
     const [selectedTypes, setSelectedTypes] = useState<string[]>([])
 
     // Mock Exchange Rate
@@ -41,19 +42,56 @@ export function InvestmentsTable({ viewCurrency, onViewCurrencyChange }: Investm
         )
     }
 
-    const filteredInvestments = MOCK_INVESTMENTS.filter(inv => {
-        if (selectedTypes.length === 0) return true
-        return selectedTypes.includes(inv.type)
-    })
+    const formatCurrency = (value: number, currency: string) => {
+        const locale = currency === 'USD' ? 'en-US' : 'pt-BR'
+        return new Intl.NumberFormat(locale, {
+            style: 'currency',
+            currency: currency
+        }).format(value)
+    }
+
+    const isEmpty = assets.length === 0
+
+    let displayInvestments = assets
+
+    // Placeholder Logic for Skeleton
+    if (isEmpty) {
+        // Create 5 fake items
+        displayInvestments = Array(5).fill(null).map((_, i) => ({
+            id: `skeleton-${i}`,
+            ticker: "XXXX3",
+            name: "Placeholder Asset",
+            type: "stock_br",
+            quantity: 100,
+            average_price: 10,
+            currency: "BRL",
+            last_update: new Date(),
+            // Skeleton flag
+            isSkeleton: true
+        } as any))
+    } else {
+        // Apply Filters only if not empty
+        displayInvestments = displayInvestments.filter(inv => {
+            if (selectedTypes.length === 0) return true
+            return selectedTypes.includes(inv.type)
+        })
+    }
 
     const getTypeLabel = (type: string) => {
         switch (type) {
-            case "stock": return "Ações"
-            case "etf": return "ETF"
-            case "fii": return "FII"
+            case "stock_br": return "Ações Brasil"
+            case "stock_us": return "Ações EUA"
+            case "etf_br": return "ETF Brasil"
+            case "etf_us": return "ETF EUA"
+            case "reit_br": return "FIIs"
+            case "reit_us": return "REITs"
             case "crypto": return "Cripto"
-            case "treasury": return "Tesouro Direto"
+            case "treasure": return "Tesouro Direto"
             case "fixed_income": return "Renda Fixa"
+            case "fixed_income_us": return "Renda Fixa EUA"
+            case "fund": return "Fundos de Inv."
+            case "fiagro": return "FI Agro"
+            case "fund_exempt": return "Fundos Isentos"
             default: return type
         }
     }
@@ -67,7 +105,7 @@ export function InvestmentsTable({ viewCurrency, onViewCurrencyChange }: Investm
                     <h3 className="font-semibold text-gray-900 dark:text-white shrink-0">Meus Ativos</h3>
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="outline" size="sm" className="h-8 border-dashed gap-1 text-xs">
+                            <Button variant="outline" size="sm" className="h-8 border-dashed gap-1 text-xs" disabled={isEmpty}>
                                 <Filter className="h-3.5 w-3.5" />
                                 <span className="hidden sm:inline">Filtrar</span>
                                 {selectedTypes.length > 0 && (
@@ -80,7 +118,7 @@ export function InvestmentsTable({ viewCurrency, onViewCurrencyChange }: Investm
                         <DropdownMenuContent align="start" className="w-[200px]">
                             <DropdownMenuLabel>Renda Variável</DropdownMenuLabel>
                             <DropdownMenuSeparator />
-                            {["stock", "etf", "fii", "crypto"].map((type) => (
+                            {["stock_br", "stock_us", "etf_br", "etf_us", "reit_br", "reit_us", "crypto", "fiagro"].map((type) => (
                                 <DropdownMenuCheckboxItem
                                     key={type}
                                     checked={selectedTypes.includes(type)}
@@ -91,22 +129,9 @@ export function InvestmentsTable({ viewCurrency, onViewCurrencyChange }: Investm
                             ))}
 
                             <DropdownMenuSeparator />
-                            <DropdownMenuLabel>Renda Fixa</DropdownMenuLabel>
+                            <DropdownMenuLabel>Renda Fixa & Fundos</DropdownMenuLabel>
                             <DropdownMenuSeparator />
-                            {["fixed_income"].map((type) => (
-                                <DropdownMenuCheckboxItem
-                                    key={type}
-                                    checked={selectedTypes.includes(type)}
-                                    onCheckedChange={() => toggleType(type)}
-                                >
-                                    {getTypeLabel(type)}
-                                </DropdownMenuCheckboxItem>
-                            ))}
-
-                            <DropdownMenuSeparator />
-                            <DropdownMenuLabel>Tesouro Direto</DropdownMenuLabel>
-                            <DropdownMenuSeparator />
-                            {["treasury"].map((type) => (
+                            {["fixed_income", "fixed_income_us", "treasure", "fund", "fund_exempt"].map((type) => (
                                 <DropdownMenuCheckboxItem
                                     key={type}
                                     checked={selectedTypes.includes(type)}
@@ -188,12 +213,25 @@ export function InvestmentsTable({ viewCurrency, onViewCurrencyChange }: Investm
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {filteredInvestments.map((inv, index) => {
-                            // Currency Conversion Logic
-                            let displayAvgPrice = inv.avgPrice
-                            let displayCurrentPrice = inv.currentPrice
+                        {displayInvestments.map((inv, index) => {
+                            if ((inv as any).isSkeleton) {
+                                return (
+                                    <TableRow key={inv.id} className="border-b border-gray-100 dark:border-zinc-800/50">
+                                        <TableCell><div className="h-8 w-24 bg-gray-100 dark:bg-zinc-800 rounded animate-pulse mx-auto" /></TableCell>
+                                        <TableCell><div className="h-6 w-16 bg-gray-100 dark:bg-zinc-800 rounded animate-pulse mx-auto" /></TableCell>
+                                        <TableCell><div className="h-6 w-12 bg-gray-100 dark:bg-zinc-800 rounded animate-pulse ml-auto" /></TableCell>
+                                        <TableCell><div className="h-6 w-20 bg-gray-100 dark:bg-zinc-800 rounded animate-pulse ml-auto" /></TableCell>
+                                        <TableCell><div className="h-6 w-20 bg-gray-100 dark:bg-zinc-800 rounded animate-pulse ml-auto" /></TableCell>
+                                        <TableCell><div className="h-6 w-24 bg-gray-100 dark:bg-zinc-800 rounded animate-pulse ml-auto" /></TableCell>
+                                        <TableCell><div className="h-6 w-16 bg-gray-100 dark:bg-zinc-800 rounded animate-pulse ml-auto" /></TableCell>
+                                    </TableRow>
+                                )
+                            }
 
-                            // Convert if needed
+                            // Currency Conversion Logic
+                            let displayAvgPrice = inv.average_price
+                            let displayCurrentPrice = inv.average_price
+
                             if (viewCurrency === "BRL" && inv.currency === "USD") {
                                 displayAvgPrice *= USD_BRL_RATE
                                 displayCurrentPrice *= USD_BRL_RATE
@@ -203,41 +241,45 @@ export function InvestmentsTable({ viewCurrency, onViewCurrencyChange }: Investm
                             }
 
                             const totalValue = inv.quantity * displayCurrentPrice
-                            const profit = (displayCurrentPrice - displayAvgPrice) * inv.quantity // Total Profit Value
-                            const profitPercent = ((displayCurrentPrice - displayAvgPrice) / displayAvgPrice) * 100
+                            const profit = (displayCurrentPrice - displayAvgPrice) * inv.quantity
+                            const profitPercent = displayAvgPrice > 0
+                                ? ((displayCurrentPrice - displayAvgPrice) / displayAvgPrice) * 100
+                                : 0
 
                             return (
                                 <TableRow
                                     key={inv.id}
                                     className={`
-                                    border-b border-gray-100 dark:border-zinc-800/50 
-                                    hover:bg-emerald-50/50 dark:hover:bg-emerald-900/10 
-                                    transition-colors
-                                    ${index % 2 === 0
+                                        border-b border-gray-100 dark:border-zinc-800/50 
+                                        hover:bg-emerald-50/50 dark:hover:bg-emerald-900/10 
+                                        transition-colors
+                                        ${index % 2 === 0
                                             ? 'bg-white dark:bg-zinc-900'
                                             : 'bg-gray-50 dark:bg-zinc-800/30'
                                         }
-                                `}
+                                    `}
                                 >
                                     <TableCell className="pl-4">
                                         <div className="flex items-center gap-3">
-                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${inv.type === 'stock' ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/20' :
-                                                inv.type === 'etf' ? 'bg-cyan-100 text-cyan-600 dark:bg-cyan-900/20' :
-                                                    inv.type === 'fii' ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/20' :
+                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${inv.type.startsWith('stock') ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/20' :
+                                                inv.type.startsWith('etf') ? 'bg-cyan-100 text-cyan-600 dark:bg-cyan-900/20' :
+                                                    inv.type.startsWith('reit') ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/20' :
                                                         inv.type === 'crypto' ? 'bg-purple-100 text-purple-600 dark:bg-purple-900/20' :
-                                                            inv.type === 'treasury' ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/20' :
+                                                            inv.type === 'treasure' ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/20' :
                                                                 inv.type === 'fixed_income' ? 'bg-green-100 text-green-600 dark:bg-green-900/20' :
                                                                     'bg-gray-100 text-gray-600'
                                                 }`}>
-                                                {inv.type === 'stock' && <TrendingUp className="h-4 w-4" />}
-                                                {inv.type === 'etf' && <TrendingUp className="h-4 w-4" />}
-                                                {inv.type === 'fii' && <Building2 className="h-4 w-4" />}
+                                                {inv.type.startsWith('stock') && <TrendingUp className="h-4 w-4" />}
+                                                {inv.type.startsWith('etf') && <TrendingUp className="h-4 w-4" />}
+                                                {inv.type.startsWith('reit') && <Building2 className="h-4 w-4" />}
                                                 {inv.type === 'crypto' && <Wallet className="h-4 w-4" />}
-                                                {inv.type === 'treasury' && <DollarSign className="h-4 w-4" />}
+                                                {inv.type === 'treasure' && <DollarSign className="h-4 w-4" />}
                                                 {inv.type === 'fixed_income' && <DollarSign className="h-4 w-4" />}
                                             </div>
                                             <div className="flex flex-col">
-                                                <span className="font-medium text-gray-900 dark:text-gray-100">{inv.ticker}</span>
+                                                <Link href={`/dashboard/investments/${inv.ticker}`} className="hover:underline hover:text-emerald-600 transition-colors">
+                                                    <span className="font-medium text-gray-900 dark:text-gray-100">{inv.ticker}</span>
+                                                </Link>
                                                 <span className="text-xs text-muted-foreground">{inv.name}</span>
                                             </div>
                                         </div>
@@ -246,16 +288,16 @@ export function InvestmentsTable({ viewCurrency, onViewCurrencyChange }: Investm
                                         {getTypeLabel(inv.type)}
                                     </TableCell>
                                     <TableCell className="text-right text-gray-600 dark:text-gray-300">
-                                        {inv.quantity.toLocaleString('pt-BR', { minimumFractionDigits: inv.type === 'crypto' ? 4 : (inv.type === 'treasury' ? 2 : 0) })}
+                                        {inv.quantity.toLocaleString('pt-BR', { minimumFractionDigits: inv.type === 'crypto' ? 4 : (inv.type === 'treasure' ? 2 : 0) })}
                                     </TableCell>
                                     <TableCell className="text-right text-gray-600 dark:text-gray-300">
-                                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: viewCurrency }).format(displayAvgPrice)}
+                                        {formatCurrency(displayAvgPrice, viewCurrency)}
                                     </TableCell>
                                     <TableCell className="text-right text-gray-600 dark:text-gray-300">
-                                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: viewCurrency }).format(displayCurrentPrice)}
+                                        {formatCurrency(displayCurrentPrice, viewCurrency)}
                                     </TableCell>
                                     <TableCell className="text-right text-gray-600 dark:text-gray-300">
-                                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: viewCurrency }).format(totalValue)}
+                                        {formatCurrency(totalValue, viewCurrency)}
                                     </TableCell>
                                     <TableCell className="text-right pr-4">
                                         <div className="flex items-center justify-end gap-1">
@@ -272,7 +314,7 @@ export function InvestmentsTable({ viewCurrency, onViewCurrencyChange }: Investm
                                         </div>
                                         <div className={`text-xs mt-1 ${profit >= 0 ? "text-emerald-600" : "text-red-600"}`}>
                                             {profit >= 0 ? "+" : ""}
-                                            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: viewCurrency }).format(profit)}
+                                            {formatCurrency(profit, viewCurrency)}
                                         </div>
                                     </TableCell>
                                 </TableRow>
@@ -283,11 +325,37 @@ export function InvestmentsTable({ viewCurrency, onViewCurrencyChange }: Investm
             </div>
 
             {/* Mobile View */}
+            {/* Mobile View */}
             <div className="md:hidden divide-y divide-gray-100 dark:divide-zinc-800">
-                {filteredInvestments.map((inv) => {
+                {displayInvestments.map((inv) => {
+                    // Mobile Skeleton
+                    if ((inv as any).isSkeleton) {
+                        return (
+                            <div key={inv.id} className="p-4 flex gap-3 animate-pulse">
+                                <div className="w-10 h-10 rounded-full bg-gray-100 dark:bg-zinc-800 shrink-0 mt-1" />
+                                <div className="flex-1 space-y-2">
+                                    <div className="flex items-start justify-between">
+                                        <div className="space-y-1">
+                                            <div className="h-5 w-20 bg-gray-100 dark:bg-zinc-800 rounded" />
+                                            <div className="h-4 w-32 bg-gray-100 dark:bg-zinc-800 rounded" />
+                                        </div>
+                                        <div className="h-5 w-24 bg-gray-100 dark:bg-zinc-800 rounded" />
+                                    </div>
+                                    <div className="flex items-center justify-between mt-2">
+                                        <div className="h-4 w-16 bg-gray-100 dark:bg-zinc-800 rounded" />
+                                        <div className="flex items-center gap-2">
+                                            <div className="h-4 w-16 bg-gray-100 dark:bg-zinc-800 rounded" />
+                                            <div className="h-5 w-12 bg-gray-100 dark:bg-zinc-800 rounded" />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )
+                    }
+
                     // Currency Conversion Logic (Duplicated for mobile scope availability)
-                    let displayAvgPrice = inv.avgPrice
-                    let displayCurrentPrice = inv.currentPrice
+                    let displayAvgPrice = inv.average_price
+                    let displayCurrentPrice = inv.average_price // Use average as current for now
 
                     if (viewCurrency === "BRL" && inv.currency === "USD") {
                         displayAvgPrice *= USD_BRL_RATE
@@ -299,24 +367,27 @@ export function InvestmentsTable({ viewCurrency, onViewCurrencyChange }: Investm
 
                     const totalValue = inv.quantity * displayCurrentPrice
                     const profit = (displayCurrentPrice - displayAvgPrice) * inv.quantity
-                    const profitPercent = ((displayCurrentPrice - displayAvgPrice) / displayAvgPrice) * 100
+                    // Prevent division by zero
+                    const profitPercent = displayAvgPrice > 0
+                        ? ((displayCurrentPrice - displayAvgPrice) / displayAvgPrice) * 100
+                        : 0
 
                     return (
                         <div key={inv.id} className="p-4 flex gap-3">
                             {/* Icon */}
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 mt-1 ${inv.type === 'stock' ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/20' :
-                                inv.type === 'etf' ? 'bg-cyan-100 text-cyan-600 dark:bg-cyan-900/20' :
-                                    inv.type === 'fii' ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/20' :
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 mt-1 ${inv.type.startsWith('stock') ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/20' :
+                                inv.type.startsWith('etf') ? 'bg-cyan-100 text-cyan-600 dark:bg-cyan-900/20' :
+                                    inv.type.startsWith('reit') ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/20' :
                                         inv.type === 'crypto' ? 'bg-purple-100 text-purple-600 dark:bg-purple-900/20' :
-                                            inv.type === 'treasury' ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/20' :
+                                            inv.type === 'treasure' ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/20' :
                                                 inv.type === 'fixed_income' ? 'bg-green-100 text-green-600 dark:bg-green-900/20' :
                                                     'bg-gray-100 text-gray-600'
                                 }`}>
-                                {inv.type === 'stock' && <TrendingUp className="h-5 w-5" />}
-                                {inv.type === 'etf' && <TrendingUp className="h-5 w-5" />}
-                                {inv.type === 'fii' && <Building2 className="h-5 w-5" />}
+                                {inv.type.startsWith('stock') && <TrendingUp className="h-5 w-5" />}
+                                {inv.type.startsWith('etf') && <TrendingUp className="h-5 w-5" />}
+                                {inv.type.startsWith('reit') && <Building2 className="h-5 w-5" />}
                                 {inv.type === 'crypto' && <Wallet className="h-5 w-5" />}
-                                {inv.type === 'treasury' && <DollarSign className="h-5 w-5" />}
+                                {inv.type === 'treasure' && <DollarSign className="h-5 w-5" />}
                                 {inv.type === 'fixed_income' && <DollarSign className="h-5 w-5" />}
                             </div>
 
@@ -328,7 +399,7 @@ export function InvestmentsTable({ viewCurrency, onViewCurrencyChange }: Investm
                                     </div>
                                     <div className="text-right">
                                         <div className="font-semibold text-gray-900 dark:text-gray-100">
-                                            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: viewCurrency }).format(totalValue)}
+                                            {formatCurrency(totalValue, viewCurrency)}
                                         </div>
                                     </div>
                                 </div>
@@ -339,7 +410,7 @@ export function InvestmentsTable({ viewCurrency, onViewCurrencyChange }: Investm
                                     <div className="flex items-center gap-2">
                                         <span className={`text-xs font-medium ${profit >= 0 ? "text-emerald-600" : "text-red-600"}`}>
                                             {profit >= 0 ? "+" : ""}
-                                            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: viewCurrency }).format(profit)}
+                                            {formatCurrency(profit, viewCurrency)}
                                         </span>
                                         <Badge
                                             variant="secondary"
