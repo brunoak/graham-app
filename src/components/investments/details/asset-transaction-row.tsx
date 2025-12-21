@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { TableCell, TableRow } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
+
 import { Button } from "@/components/ui/button"
 import { MoreHorizontal, Pencil, Trash } from "lucide-react"
 import {
@@ -64,15 +64,9 @@ export function AssetTransactionRow({ transaction, currency }: AssetTransactionR
             <TableRow>
                 <TableCell>{formatDate(transaction.date)}</TableCell>
                 <TableCell>
-                    <Badge
-                        className={
-                            transaction.type === 'buy' ? 'bg-emerald-600 hover:bg-emerald-700' :
-                                transaction.type === 'dividend' ? 'bg-sky-500 hover:bg-sky-600' :
-                                    'bg-red-600 hover:bg-red-700'
-                        }
-                    >
+                    <span className="font-medium text-gray-900 dark:text-gray-100">
                         {transaction.type === 'buy' ? 'Compra' : transaction.type === 'dividend' ? 'Provento' : 'Venda'}
-                    </Badge>
+                    </span>
                 </TableCell>
                 <TableCell className="text-right">{transaction.quantity}</TableCell>
                 <TableCell className="text-right">{formatCurrency(transaction.price)}</TableCell>

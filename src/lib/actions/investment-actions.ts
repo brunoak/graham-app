@@ -410,6 +410,7 @@ export async function updateInvestmentTransaction(transactionId: string, input: 
 
 export async function getInvestedCapitalHistory() {
     const { supabase } = await getAuthenticatedUser()
+    const { getGlobalIndices } = await import("@/lib/services/market-service")
 
     // Fetch all buy/sell transactions ordered by date
     const { data: transactions, error } = await supabase
@@ -422,17 +423,23 @@ export async function getInvestedCapitalHistory() {
         return []
     }
 
+    // Fetch Exchange Rate for normalization
+    const indices = await getGlobalIndices().catch(() => [])
+    const usdQuote = indices.find(q => q.symbol === 'USDBRL=X' || q.symbol === 'USDBRL')
+    const USD_BRL = usdQuote?.regularMarketPrice || 5.50
+
     // Bucket by Month
     const monthlyData: Record<string, number> = {}
     let currentInvested = 0
 
-    // Initialize last 12 months with 0 (or previous value) to ensure continuity?
-    // For "Invested Capital", it is a cumulative state.
-    // Better strategy: Calculate the state for EVERY transaction, then sample the END of each month.
-
     // 1. Calculate running total for every transaction
     const timeline = transactions.map(tx => {
-        const amount = (tx.quantity * tx.price) + (tx.fees || 0)
+        let amount = (tx.quantity * tx.price) + (tx.fees || 0)
+
+        // Normalize to BRL if transaction was in USD
+        if (tx.currency === 'USD') {
+            amount = amount * USD_BRL
+        }
 
         if (tx.type === 'buy') {
             currentInvested += amount

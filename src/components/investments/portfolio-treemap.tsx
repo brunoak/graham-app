@@ -11,16 +11,33 @@ import {
     TooltipTrigger,
 } from "@/components/ui/tooltip"
 import type { Asset } from "@/lib/schemas/investment-schema"
-
-const USD_BRL_RATE = 5.50
+import type { MarketQuote } from "@/lib/services/market-service"
 
 interface PortfolioTreemapProps {
     currency?: "BRL" | "USD"
     assets?: Asset[]
+    quotes?: Record<string, MarketQuote>
+    exchangeRate?: number
 }
 
-export function PortfolioTreemap({ currency = "BRL", assets = [] }: PortfolioTreemapProps) {
+/**
+ * Portfolio Treemap Component
+ * Visualizes the portfolio distribution using a Treemap.
+ * 
+ * Dimensions:
+ * - Size (Area): Represents the Total Value of the position (Quantity * Price).
+ * - Color (Heatmap): Represents the Daily Variation (regularMarketChangePercent).
+ *   - Green: Positive variation
+ *   - Red: Negative variation
+ *   - Gray: Zero/No Data
+ * 
+ * Currency Conversion:
+ * - Automatically converts USD assets to BRL (or vice versa) for correct relative sizing using Real-Time Exchange Rate.
+ */
+export function PortfolioTreemap({ currency = "BRL", assets = [], quotes, exchangeRate }: PortfolioTreemapProps) {
     const { theme } = useTheme()
+
+    const USD_BRL_RATE = exchangeRate || 5.50
 
     // DATA TRANSFORMATION LOGIC
     // 1. Calculate values based on selected currency
@@ -30,31 +47,38 @@ export function PortfolioTreemap({ currency = "BRL", assets = [] }: PortfolioTre
     //    Let's stick to a flat list under "Portfolio" so boxes sort purely by size.
 
     const processedAssets = assets.map(asset => {
-        // Fallback for current price (using average price -> 0 profit)
-        let price = asset.price || asset.average_price
-        let avgPrice = asset.average_price
+        const quote = quotes?.[asset.ticker]
+
+        // Priority: Quote Price -> Asset Avg Price (Fallback)
+        // If Quote exists, use it. If not, fallback to Avg Price.
+        let rawPrice = quote ? quote.regularMarketPrice : asset.average_price
+
+        // Variation: Quote Change -> 0 (Fallback)
+        let rawChange = quote ? quote.regularMarketChangePercent : 0
+
+        // If no quote, and we are using avg price, change is 0% by definition of cost basis view.
+        // Unless we wanted to calculate change vs previous day close manually, but we don't have that.
+        // So 0 is correct for "Unknow change".
+
+        let displayPrice = rawPrice
 
         // Currency Conversion
         const assetCurrency = asset.currency || 'BRL'
         if (currency === "BRL" && assetCurrency === "USD") {
-            price *= USD_BRL_RATE
-            avgPrice *= USD_BRL_RATE
+            displayPrice *= USD_BRL_RATE
         } else if (currency === "USD" && assetCurrency === "BRL") {
-            price /= USD_BRL_RATE
-            avgPrice /= USD_BRL_RATE
+            displayPrice /= USD_BRL_RATE
         }
 
-        const totalValue = asset.quantity * price
-        // Avoid division by zero
-        const changePercent = avgPrice > 0 ? ((price - avgPrice) / avgPrice) * 100 : 0
+        const totalValue = asset.quantity * displayPrice
 
         return {
             name: asset.ticker, // Display Name
             ticker: asset.ticker,
             full_name: asset.name,
             size: totalValue, // Box Size matches Total Value which matches Portfolio %
-            price: price,
-            change: parseFloat(changePercent.toFixed(2)),
+            price: displayPrice,
+            change: parseFloat(rawChange.toFixed(2)), // Real Variation
             type: asset.type
         }
     }).filter(a => a.size > 0) // Remove empty positions

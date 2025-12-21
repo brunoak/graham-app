@@ -10,24 +10,33 @@ interface ProfitabilityChartProps {
     totalValue?: number
     historyData: { name: string, value: number }[]
     dividendData: { name: string, value: number, breakdown?: { ticker: string, value: number }[] }[]
+    exchangeRate?: number
 }
 
 export function ProfitabilityChart({
     currency = 'BRL',
     totalValue = 0,
     historyData = [],
-    dividendData = []
+    dividendData = [],
+    exchangeRate
 }: ProfitabilityChartProps) {
     const { theme } = useTheme()
     const [viewMode, setViewMode] = useState<"profitability" | "dividends">("profitability")
 
-    const USD_BRL_RATE = 5.50
+    const USD_BRL_RATE = exchangeRate || 5.50
 
-    const activeRawData = viewMode === "profitability" ? historyData : dividendData
+    // Sync Chart with Header: Force the last data point to match totalValue (Real Equity)
+    // This bridges the gap between "Historical Invested Capital" and "Current Market Value"
+    const syncedHistoryData = [...historyData]
+    if (syncedHistoryData.length > 0 && totalValue > 0) {
+        const lastIdx = syncedHistoryData.length - 1
+        syncedHistoryData[lastIdx] = {
+            ...syncedHistoryData[lastIdx],
+            value: totalValue
+        }
+    }
 
-    // Use passed totalValue if available for profitability view, ensuring consistency
-    // Note: The chart area data is still mock, so the tooltip might mismatch the header.
-    // Ideally we would push the real Total Value as the last point in the chart data.
+    const activeRawData = viewMode === "profitability" ? syncedHistoryData : dividendData
 
     const isEmpty = activeRawData.length === 0 || activeRawData.every(d => d.value === 0)
 
@@ -70,7 +79,7 @@ export function ProfitabilityChart({
     const displayValue = currency === 'USD' ? displayValueRaw / USD_BRL_RATE : displayValueRaw
 
 
-    // Convert data based on currency (Mock data conversion)
+    // Convert data based on currency
     // If empty, use placeholder flat/gentle curve data
     const placeholderData = [
         { name: "Jan", value: 40 },

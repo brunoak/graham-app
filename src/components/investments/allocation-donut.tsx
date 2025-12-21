@@ -3,9 +3,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import type { Asset } from "@/lib/schemas/investment-schema"
 import { Tooltip as ShadcnTooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
+import type { MarketQuote } from "@/lib/services/market-service"
+
 interface AllocationDonutProps {
     currency?: string
     assets: Asset[]
+    quotes?: Record<string, MarketQuote>
+    exchangeRate?: number
 }
 
 // Helper for Currency Formatting
@@ -58,8 +62,8 @@ const ChartTooltip = ({ active, payload }: any) => {
     return null
 }
 
-export function AllocationDonut({ currency = 'BRL', assets }: AllocationDonutProps) {
-    const USD_BRL_RATE = 5.50
+export function AllocationDonut({ currency = 'BRL', assets, quotes, exchangeRate }: AllocationDonutProps) {
+    const USD_BRL_RATE = exchangeRate || 5.50
 
     // Group assets by type
     const groups: Record<string, { value: number, assets: any[], color: string, name: string }> = {
@@ -78,7 +82,12 @@ export function AllocationDonut({ currency = 'BRL', assets }: AllocationDonutPro
     }
 
     assets.forEach(asset => {
-        let value = asset.quantity * (asset.price || asset.average_price) // Fallback to avg price if current not avail
+        const quote = quotes?.[asset.ticker]
+        // Priority: Quote Price -> Asset Avg Price
+        const price = quote?.regularMarketPrice || asset.average_price
+
+        // Calculate Value
+        let value = asset.quantity * price
 
         // Normalize value to BRL for grouping calculation if asset is in USD
         // We will convert to view currency later, but we need a common base for "value" aggregation if we want consistent relative sizes?

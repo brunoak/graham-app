@@ -11,18 +11,30 @@ import { ArkadWidget } from "@/components/dashboard/arkad-widget"
 import { InvestmentsTicker } from "@/components/investments/investments-ticker"
 import type { Asset } from "@/lib/schemas/investment-schema"
 
+import type { MarketQuote } from "@/lib/services/market-service"
+
 interface InvestmentsContentProps {
     summary: React.ReactNode
     initialAssets: Asset[]
     historyData: { name: string, value: number }[]
     dividendData: { name: string, value: number, breakdown?: { ticker: string, value: number }[] }[]
+    quotes?: Record<string, MarketQuote>
+    globalIndices?: MarketQuote[]
 }
 
-export function InvestmentsContent({ summary, initialAssets, historyData, dividendData }: InvestmentsContentProps) {
+export function InvestmentsContent({ summary, initialAssets, historyData, dividendData, quotes, globalIndices = [] }: InvestmentsContentProps) {
     const [currency, setCurrency] = useState<"BRL" | "USD">("BRL")
 
-    // Calculate Totals for Charts
-    const totalValue = initialAssets.reduce((acc, asset) => acc + (asset.quantity * (asset.price || asset.average_price)), 0)
+    // Calculate Totals using Real Data if available
+    const totalValue = initialAssets.reduce((acc, asset) => {
+        const price = quotes?.[asset.ticker]?.regularMarketPrice || asset.average_price
+        return acc + (asset.quantity * price)
+    }, 0)
+
+    // Extract Real-Time Exchange Rate (USD/BRL)
+    // Yahoo Finance Ticker: "USDBRL=X" or Brapi "USDBRL"
+    const usdQuote = globalIndices.find(q => q.symbol === 'USDBRL=X' || q.symbol === 'USDBRL')
+    const exchangeRate = usdQuote?.regularMarketPrice || 5.50 // Fallback if API fails
 
     return (
         <div className="space-y-6">
@@ -34,7 +46,7 @@ export function InvestmentsContent({ summary, initialAssets, historyData, divide
             {summary}
 
             {/* Global Ticker Marquee */}
-            <InvestmentsTicker />
+            <InvestmentsTicker indices={globalIndices} />
 
 
             {/* Main Grid Layout */}
@@ -48,26 +60,39 @@ export function InvestmentsContent({ summary, initialAssets, historyData, divide
                         totalValue={totalValue}
                         historyData={historyData}
                         dividendData={dividendData}
+                        exchangeRate={exchangeRate}
                     />
 
                     {/* Heatmap */}
-                    <PortfolioTreemap currency={currency} assets={initialAssets} />
+                    <PortfolioTreemap
+                        currency={currency}
+                        assets={initialAssets}
+                        quotes={quotes}
+                        exchangeRate={exchangeRate}
+                    />
 
                     {/* Main Table */}
                     <InvestmentsTable
                         viewCurrency={currency}
                         onViewCurrencyChange={setCurrency}
                         assets={initialAssets}
+                        quotes={quotes}
+                        exchangeRate={exchangeRate}
                     />
                 </div>
 
                 {/* Sidebar (Right Column) - 3/12 */}
                 <div className="col-span-12 lg:col-span-3 space-y-6">
                     {/* Allocation Donut */}
-                    <AllocationDonut currency={currency} assets={initialAssets} />
+                    <AllocationDonut
+                        currency={currency}
+                        assets={initialAssets}
+                        quotes={quotes}
+                        exchangeRate={exchangeRate}
+                    />
 
                     {/* Market Movers (Altas e Baixas) */}
-                    <MarketMovers />
+                    <MarketMovers assets={initialAssets} quotes={quotes} />
 
                     {/* AI Assistant */}
                     <ArkadWidget />

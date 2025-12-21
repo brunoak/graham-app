@@ -3,16 +3,21 @@ import { Button } from "@/components/ui/button"
 import { ArrowLeft, TrendingUp, TrendingDown, Building2, Wallet, DollarSign } from "lucide-react"
 import Link from "next/link"
 import type { Asset } from "@/lib/schemas/investment-schema"
+import type { MarketQuote } from "@/lib/services/market-service"
 
 interface AssetHeaderProps {
     asset: Asset
+    quote?: MarketQuote | null
 }
 
-export function AssetHeader({ asset }: AssetHeaderProps) {
-    // Mock Variation (since we don't have historical data for day change yet)
-    // In a real app, this would come from a Quote API
-    const mockDayChange = 1.25
-    const isPositive = mockDayChange >= 0
+export function AssetHeader({ asset, quote }: AssetHeaderProps) {
+    // Priority: Quote Price -> Asset Avg Price (Fallback)
+    const currentPrice = quote?.regularMarketPrice || asset.average_price
+
+    // Variation Logic
+    const dayChange = quote?.regularMarketChangePercent || 0
+    const isPositive = dayChange >= 0
+    const isNeutral = dayChange === 0
 
     const formatCurrency = (value: number) => {
         const currency = asset.currency || 'BRL'
@@ -32,18 +37,26 @@ export function AssetHeader({ asset }: AssetHeaderProps) {
                     </Button>
                 </Link>
 
-                <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${asset.type.startsWith('stock') ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/20' :
-                    asset.type.startsWith('etf') ? 'bg-cyan-100 text-cyan-600 dark:bg-cyan-900/20' :
-                        asset.type.startsWith('reit') ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/20' :
-                            asset.type === 'crypto' ? 'bg-purple-100 text-purple-600 dark:bg-purple-900/20' :
-                                'bg-gray-100 text-gray-600'
-                    }`}>
-                    {asset.type.startsWith('stock') && <TrendingUp className="h-6 w-6" />}
-                    {asset.type.startsWith('etf') && <TrendingUp className="h-6 w-6" />}
-                    {asset.type.startsWith('reit') && <Building2 className="h-6 w-6" />}
-                    {asset.type === 'crypto' && <Wallet className="h-6 w-6" />}
-                    {(asset.type === 'treasure' || asset.type === 'fixed_income') && <DollarSign className="h-6 w-6" />}
-                </div>
+                {quote?.logourl ? (
+                    <img
+                        src={quote.logourl}
+                        alt={asset.ticker}
+                        className="w-12 h-12 rounded-full object-cover bg-white shadow-sm shrink-0"
+                    />
+                ) : (
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${asset.type.startsWith('stock') ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/20' :
+                        asset.type.startsWith('etf') ? 'bg-cyan-100 text-cyan-600 dark:bg-cyan-900/20' :
+                            asset.type.startsWith('reit') ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/20' :
+                                asset.type === 'crypto' ? 'bg-purple-100 text-purple-600 dark:bg-purple-900/20' :
+                                    'bg-gray-100 text-gray-600'
+                        }`}>
+                        {asset.type.startsWith('stock') && <TrendingUp className="h-6 w-6" />}
+                        {asset.type.startsWith('etf') && <TrendingUp className="h-6 w-6" />}
+                        {asset.type.startsWith('reit') && <Building2 className="h-6 w-6" />}
+                        {asset.type === 'crypto' && <Wallet className="h-6 w-6" />}
+                        {(asset.type === 'treasure' || asset.type === 'fixed_income') && <DollarSign className="h-6 w-6" />}
+                    </div>
+                )}
 
                 <div>
                     <div className="flex items-center gap-2">
@@ -61,12 +74,14 @@ export function AssetHeader({ asset }: AssetHeaderProps) {
                     <p className="text-xs text-gray-500 uppercase font-medium">Preço Atual</p>
                     <div className="flex items-baseline gap-2">
                         <span className="text-xl font-bold text-gray-900 dark:text-white">
-                            {formatCurrency(asset.price || asset.average_price)}
+                            {formatCurrency(currentPrice)}
                         </span>
-                        <span className={`text-xs font-medium flex items-center ${isPositive ? 'text-emerald-600' : 'text-red-600'}`}>
-                            {isPositive ? <TrendingUp className="h-3 w-3 mr-1" /> : <TrendingDown className="h-3 w-3 mr-1" />}
-                            {mockDayChange}%
-                        </span>
+                        {quote && (
+                            <span className={`text-xs font-medium flex items-center ${isPositive ? 'text-emerald-600' : 'text-red-600'}`}>
+                                {isPositive ? <TrendingUp className="h-3 w-3 mr-1" /> : <TrendingDown className="h-3 w-3 mr-1" />}
+                                {dayChange.toFixed(2)}%
+                            </span>
+                        )}
                     </div>
                 </div>
 
@@ -75,7 +90,7 @@ export function AssetHeader({ asset }: AssetHeaderProps) {
                 <div>
                     <p className="text-xs text-gray-500 uppercase font-medium">Saldo Total</p>
                     <span className="text-xl font-bold text-gray-900 dark:text-white">
-                        {formatCurrency((asset.price || asset.average_price) * asset.quantity)}
+                        {formatCurrency(currentPrice * asset.quantity)}
                     </span>
                 </div>
             </div>

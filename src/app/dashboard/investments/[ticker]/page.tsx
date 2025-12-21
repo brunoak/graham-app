@@ -1,31 +1,14 @@
-import { getAssetByTicker } from "@/lib/actions/investment-actions"
+import { getAssetByTicker, getInvestmentTransactions } from "@/lib/actions/investment-actions"
 import { notFound } from "next/navigation"
-import { AssetHeader } from "@/components/investments/details/asset-header"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Card, CardContent } from "@/components/ui/card"
 import { AssetTransactions } from "@/components/investments/details/asset-transactions"
+import { AssetDetailsForm } from "@/components/investments/details/asset-details-form"
+import { IndicatorsGrid } from "@/components/investments/details/indicators-grid"
 
-// Placeholder Components (for now)
-// Will implement separate files for these shortly
-const TradingViewWidget = ({ ticker }: { ticker: string }) => (
-    <div className="w-full h-[400px] bg-gray-50 dark:bg-zinc-900 rounded-lg flex items-center justify-center border border-gray-100 dark:border-zinc-800">
-        <div className="text-center">
-            <p className="text-sm font-medium text-gray-400">TradingView Chart (Mock)</p>
-            <p className="text-xs text-gray-500">{ticker}</p>
-        </div>
-    </div>
-)
+import { AssetHeader } from "@/components/investments/details/asset-header"
+import { getMarketQuote, getMarketFundamentals } from "@/lib/services/market-service"
 
-const FundamentalIndicators = () => (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {['P/L', 'P/VP', 'DY', 'ROE'].map((label) => (
-            <div key={label} className="bg-white dark:bg-zinc-900 p-4 rounded-lg border border-gray-100 dark:border-zinc-800">
-                <p className="text-xs text-gray-500 font-medium">{label}</p>
-                <p className="text-lg font-bold text-gray-900 dark:text-white">-</p>
-            </div>
-        ))}
-    </div>
-)
+import { TradingViewWidget } from "@/components/investments/details/tradingview-widget"
 
 interface AssetPageProps {
     params: Promise<{
@@ -36,71 +19,77 @@ interface AssetPageProps {
 export default async function AssetPage(props: AssetPageProps) {
     const params = await props.params;
     const { ticker } = params;
-    const asset = await getAssetByTicker(ticker)
+
+    // Parallel Fetching: DB + Market API
+    const [asset, transactions, quote, fundamentals] = await Promise.all([
+        getAssetByTicker(ticker),
+        getInvestmentTransactions(ticker),
+        getMarketQuote(ticker),
+        getMarketFundamentals(ticker)
+    ])
 
     if (!asset) {
         notFound()
     }
 
     return (
-        <div className="container py-8 max-w-7xl">
-            <AssetHeader asset={asset} />
+        <div className="container py-8 max-w-[1600px] space-y-8">
 
-            <Tabs defaultValue="overview" className="space-y-6">
-                <TabsList>
-                    <TabsTrigger value="overview">Visão Geral</TabsTrigger>
-                    <TabsTrigger value="history">Histórico</TabsTrigger>
-                    <TabsTrigger value="dividends">Proventos</TabsTrigger>
-                </TabsList>
+            <div className="space-y-6">
+                {/* 1. Standard Graham Header (Ticker, Name, Type) */}
+                <AssetHeader asset={asset} quote={quote} />
 
-                <TabsContent value="overview" className="space-y-6">
-                    <div className="grid grid-cols-12 gap-6">
-                        {/* Main Chart */}
-                        <Card className="col-span-12 lg:col-span-8 border-gray-100 dark:border-zinc-800 shadow-sm">
-                            <CardHeader>
-                                <CardTitle>Preço (TradingView)</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <TradingViewWidget ticker={asset.ticker} />
+                {/* 2. New Form-Style Details (Now with Real Data) */}
+                <AssetDetailsForm
+                    asset={asset}
+                    quote={quote}
+                />
+
+                {/* 3. Chart Section */}
+                <section>
+                    <TradingViewWidget ticker={asset.ticker} />
+                </section>
+
+                {/* 4. Indicators Section (Real Data) */}
+                <section>
+                    <IndicatorsGrid fundamentals={fundamentals} />
+                </section>
+
+                {/* 5. Tables Section */}
+                <div className="space-y-8">
+                    {/* Dividends Table */}
+                    <section className="space-y-4">
+                        <div className="flex items-center justify-between">
+                            <div className="space-y-1">
+                                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Proventos recebidos</h2>
+                                <p className="text-sm text-gray-500">Histórico de dividendos e JCP.</p>
+                            </div>
+                            <span className="text-xs font-medium text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 dark:text-emerald-400 px-3 py-1.5 rounded-full cursor-pointer hover:bg-emerald-100 transition-colors">
+                                + Incluir Provento
+                            </span>
+                        </div>
+
+                        <Card className="border-gray-100 dark:border-zinc-800 shadow-sm overflow-hidden bg-white dark:bg-zinc-900">
+                            <CardContent className="p-0">
+                                <AssetTransactions ticker={asset.ticker} currency={asset.currency} tab="dividends" />
                             </CardContent>
                         </Card>
+                    </section>
 
-                        {/* Side Widgets (Indicators) */}
-                        <div className="col-span-12 lg:col-span-4 space-y-6">
-                            <Card className="border-gray-100 dark:border-zinc-800 shadow-sm">
-                                <CardHeader>
-                                    <CardTitle>Indicadores</CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                    <FundamentalIndicators />
-                                </CardContent>
-                            </Card>
+                    {/* Transactions Table */}
+                    <section className="space-y-4">
+                        <div className="space-y-1">
+                            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Negócios realizados</h2>
+                            <p className="text-sm text-gray-500">Extrato completo de compra e venda.</p>
                         </div>
-                    </div>
-                </TabsContent>
-
-                <TabsContent value="history">
-                    <Card className="border-gray-100 dark:border-zinc-800 shadow-sm">
-                        <CardHeader>
-                            <CardTitle>Histórico de Transações</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <AssetTransactions ticker={asset.ticker} currency={asset.currency} tab="history" />
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-
-                <TabsContent value="dividends">
-                    <Card className="border-gray-100 dark:border-zinc-800 shadow-sm">
-                        <CardHeader>
-                            <CardTitle>Histórico de Proventos</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <AssetTransactions ticker={asset.ticker} currency={asset.currency} tab="dividends" />
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-            </Tabs>
+                        <Card className="border-gray-100 dark:border-zinc-800 shadow-sm overflow-hidden bg-white dark:bg-zinc-900">
+                            <CardContent className="p-0">
+                                <AssetTransactions ticker={asset.ticker} currency={asset.currency} tab="history" />
+                            </CardContent>
+                        </Card>
+                    </section>
+                </div>
+            </div>
         </div>
     )
 }

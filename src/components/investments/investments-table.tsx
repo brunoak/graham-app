@@ -24,17 +24,32 @@ import { AddAssetDialog } from "./add-asset-dialog"
 import Link from "next/link"
 import type { Asset } from "@/lib/schemas/investment-schema"
 
+import type { MarketQuote } from "@/lib/services/market-service"
+
 interface InvestmentsTableProps {
     viewCurrency: "BRL" | "USD"
     onViewCurrencyChange: (currency: "BRL" | "USD") => void
     assets: Asset[]
+    quotes?: Record<string, MarketQuote>
+    exchangeRate?: number
 }
 
-export function InvestmentsTable({ viewCurrency, onViewCurrencyChange, assets }: InvestmentsTableProps) {
+/**
+ * Investments Table Component.
+ * Lists all user assets with Real-Time Prices and Profitability.
+ * 
+ * Features:
+ * - **Real-Time Prices:** Uses `quotes[ticker].regularMarketPrice` if available.
+ *   - Fallback: Uses `asset.average_price` if no live quote is found.
+ * - **Currency Conversion:** Toggles between BRL and USD view using Real-Time Exchange Rate.
+ * - **Mobile View:** Responsive card layout for small screens.
+ * - **Skeleton Loading:** Displays loading state while data fetches.
+ */
+export function InvestmentsTable({ viewCurrency, onViewCurrencyChange, assets, quotes, exchangeRate }: InvestmentsTableProps) {
     const [selectedTypes, setSelectedTypes] = useState<string[]>([])
 
-    // Mock Exchange Rate
-    const USD_BRL_RATE = 5.50
+    // Use Real Exchange Rate or Fallback
+    const USD_BRL_RATE = exchangeRate || 5.50
 
     const toggleType = (type: string) => {
         setSelectedTypes(prev =>
@@ -229,8 +244,11 @@ export function InvestmentsTable({ viewCurrency, onViewCurrencyChange, assets }:
                             }
 
                             // Currency Conversion Logic
+                            // Use Real Quote Price if available, otherwise Average Price fallback
+                            const realPrice = quotes?.[inv.ticker]?.regularMarketPrice || inv.average_price
+
                             let displayAvgPrice = inv.average_price
-                            let displayCurrentPrice = inv.average_price
+                            let displayCurrentPrice = realPrice
 
                             if (viewCurrency === "BRL" && inv.currency === "USD") {
                                 displayAvgPrice *= USD_BRL_RATE
@@ -261,21 +279,29 @@ export function InvestmentsTable({ viewCurrency, onViewCurrencyChange, assets }:
                                 >
                                     <TableCell className="pl-4">
                                         <div className="flex items-center gap-3">
-                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${inv.type.startsWith('stock') ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/20' :
-                                                inv.type.startsWith('etf') ? 'bg-cyan-100 text-cyan-600 dark:bg-cyan-900/20' :
-                                                    inv.type.startsWith('reit') ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/20' :
-                                                        inv.type === 'crypto' ? 'bg-purple-100 text-purple-600 dark:bg-purple-900/20' :
-                                                            inv.type === 'treasure' ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/20' :
-                                                                inv.type === 'fixed_income' ? 'bg-green-100 text-green-600 dark:bg-green-900/20' :
-                                                                    'bg-gray-100 text-gray-600'
-                                                }`}>
-                                                {inv.type.startsWith('stock') && <TrendingUp className="h-4 w-4" />}
-                                                {inv.type.startsWith('etf') && <TrendingUp className="h-4 w-4" />}
-                                                {inv.type.startsWith('reit') && <Building2 className="h-4 w-4" />}
-                                                {inv.type === 'crypto' && <Wallet className="h-4 w-4" />}
-                                                {inv.type === 'treasure' && <DollarSign className="h-4 w-4" />}
-                                                {inv.type === 'fixed_income' && <DollarSign className="h-4 w-4" />}
-                                            </div>
+                                            {quotes?.[inv.ticker]?.logourl ? (
+                                                <img
+                                                    src={quotes[inv.ticker].logourl}
+                                                    alt={inv.ticker}
+                                                    className="w-8 h-8 rounded-full object-cover bg-white shadow-sm shrink-0"
+                                                />
+                                            ) : (
+                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${inv.type.startsWith('stock') ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/20' :
+                                                    inv.type.startsWith('etf') ? 'bg-cyan-100 text-cyan-600 dark:bg-cyan-900/20' :
+                                                        inv.type.startsWith('reit') ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/20' :
+                                                            inv.type === 'crypto' ? 'bg-purple-100 text-purple-600 dark:bg-purple-900/20' :
+                                                                inv.type === 'treasure' ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/20' :
+                                                                    inv.type === 'fixed_income' ? 'bg-green-100 text-green-600 dark:bg-green-900/20' :
+                                                                        'bg-gray-100 text-gray-600'
+                                                    }`}>
+                                                    {inv.type.startsWith('stock') && <TrendingUp className="h-4 w-4" />}
+                                                    {inv.type.startsWith('etf') && <TrendingUp className="h-4 w-4" />}
+                                                    {inv.type.startsWith('reit') && <Building2 className="h-4 w-4" />}
+                                                    {inv.type === 'crypto' && <Wallet className="h-4 w-4" />}
+                                                    {inv.type === 'treasure' && <DollarSign className="h-4 w-4" />}
+                                                    {inv.type === 'fixed_income' && <DollarSign className="h-4 w-4" />}
+                                                </div>
+                                            )}
                                             <div className="flex flex-col">
                                                 <Link href={`/dashboard/investments/${inv.ticker}`} className="hover:underline hover:text-emerald-600 transition-colors">
                                                     <span className="font-medium text-gray-900 dark:text-gray-100">{inv.ticker}</span>
@@ -353,9 +379,11 @@ export function InvestmentsTable({ viewCurrency, onViewCurrencyChange, assets }:
                         )
                     }
 
-                    // Currency Conversion Logic (Duplicated for mobile scope availability)
+                    // Currency Conversion Logic (Mobile - Sync with Desktop)
+                    const realPrice = quotes?.[inv.ticker]?.regularMarketPrice || inv.average_price
+
                     let displayAvgPrice = inv.average_price
-                    let displayCurrentPrice = inv.average_price // Use average as current for now
+                    let displayCurrentPrice = realPrice
 
                     if (viewCurrency === "BRL" && inv.currency === "USD") {
                         displayAvgPrice *= USD_BRL_RATE
@@ -373,23 +401,35 @@ export function InvestmentsTable({ viewCurrency, onViewCurrencyChange, assets }:
                         : 0
 
                     return (
-                        <div key={inv.id} className="p-4 flex gap-3">
+                        <Link
+                            key={inv.id}
+                            href={`/dashboard/investments/${inv.ticker}`}
+                            className="p-4 flex gap-3 hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors"
+                        >
                             {/* Icon */}
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 mt-1 ${inv.type.startsWith('stock') ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/20' :
-                                inv.type.startsWith('etf') ? 'bg-cyan-100 text-cyan-600 dark:bg-cyan-900/20' :
-                                    inv.type.startsWith('reit') ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/20' :
-                                        inv.type === 'crypto' ? 'bg-purple-100 text-purple-600 dark:bg-purple-900/20' :
-                                            inv.type === 'treasure' ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/20' :
-                                                inv.type === 'fixed_income' ? 'bg-green-100 text-green-600 dark:bg-green-900/20' :
-                                                    'bg-gray-100 text-gray-600'
-                                }`}>
-                                {inv.type.startsWith('stock') && <TrendingUp className="h-5 w-5" />}
-                                {inv.type.startsWith('etf') && <TrendingUp className="h-5 w-5" />}
-                                {inv.type.startsWith('reit') && <Building2 className="h-5 w-5" />}
-                                {inv.type === 'crypto' && <Wallet className="h-5 w-5" />}
-                                {inv.type === 'treasure' && <DollarSign className="h-5 w-5" />}
-                                {inv.type === 'fixed_income' && <DollarSign className="h-5 w-5" />}
-                            </div>
+                            {quotes?.[inv.ticker]?.logourl ? (
+                                <img
+                                    src={quotes[inv.ticker].logourl}
+                                    alt={inv.ticker}
+                                    className="w-10 h-10 rounded-full object-cover bg-white shadow-sm shrink-0 mt-1"
+                                />
+                            ) : (
+                                <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 mt-1 ${inv.type.startsWith('stock') ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/20' :
+                                    inv.type.startsWith('etf') ? 'bg-cyan-100 text-cyan-600 dark:bg-cyan-900/20' :
+                                        inv.type.startsWith('reit') ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/20' :
+                                            inv.type === 'crypto' ? 'bg-purple-100 text-purple-600 dark:bg-purple-900/20' :
+                                                inv.type === 'treasure' ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/20' :
+                                                    inv.type === 'fixed_income' ? 'bg-green-100 text-green-600 dark:bg-green-900/20' :
+                                                        'bg-gray-100 text-gray-600'
+                                    }`}>
+                                    {inv.type.startsWith('stock') && <TrendingUp className="h-5 w-5" />}
+                                    {inv.type.startsWith('etf') && <TrendingUp className="h-5 w-5" />}
+                                    {inv.type.startsWith('reit') && <Building2 className="h-5 w-5" />}
+                                    {inv.type === 'crypto' && <Wallet className="h-5 w-5" />}
+                                    {inv.type === 'treasure' && <DollarSign className="h-5 w-5" />}
+                                    {inv.type === 'fixed_income' && <DollarSign className="h-5 w-5" />}
+                                </div>
+                            )}
 
                             <div className="flex-1 space-y-2">
                                 <div className="flex items-start justify-between">
@@ -425,7 +465,7 @@ export function InvestmentsTable({ viewCurrency, onViewCurrencyChange, assets }:
                                     </div>
                                 </div>
                             </div>
-                        </div>
+                        </Link>
                     )
                 })}
             </div>

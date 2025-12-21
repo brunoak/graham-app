@@ -1,8 +1,17 @@
 import { getFinancialSummary } from "@/lib/data/dashboard-data"
 import { SummaryCards } from "@/components/dashboard/summary-cards"
 
-export async function DashboardSummary() {
+interface DashboardSummaryProps {
+    investmentsValue?: number
+}
+
+export async function DashboardSummary({ investmentsValue }: DashboardSummaryProps) {
     const summary = await getFinancialSummary()
+
+    // Override with Real-Time Data if provided
+    if (investmentsValue !== undefined) {
+        summary.investments = investmentsValue
+    }
 
     return (
         <SummaryCards

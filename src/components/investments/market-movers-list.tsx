@@ -3,25 +3,53 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowUp, ArrowDown } from "lucide-react"
 
-// Mock Data - Top 5 Highs & Lows (Realistic B3 Data)
-const movers = {
-    winners: [
-        { ticker: "MGLU3", name: "Magalu", change: 5.2, price: 2.15 },
-        { ticker: "PRIO3", name: "PetroRio", change: 3.8, price: 46.50 },
-        { ticker: "WEGE3", name: "Weg", change: 1.5, price: 38.20 },
-        { ticker: "B3SA3", name: "B3", change: 1.2, price: 11.50 },
-        { ticker: "HAPV3", name: "Hapvida", change: 1.1, price: 3.85 },
-    ],
-    losers: [
-        { ticker: "VIIA3", name: "Casas Bahia", change: -4.5, price: 0.60 },
-        { ticker: "CVCB3", name: "CVC Brasil", change: -3.2, price: 2.10 },
-        { ticker: "VALE3", name: "Vale", change: -2.1, price: 68.40 },
-        { ticker: "PETR4", name: "Petrobras", change: -1.4, price: 34.15 },
-        { ticker: "MRVE3", name: "MRV", change: -1.1, price: 7.20 },
-    ]
+import type { Asset } from "@/lib/schemas/investment-schema"
+import type { MarketQuote } from "@/lib/services/market-service"
+
+interface MarketMoversProps {
+    assets?: Asset[]
+    quotes?: Record<string, MarketQuote>
 }
 
-export function MarketMovers() {
+/**
+ * Market Movers Component
+ * Displays the Top 5 Winners (Maiores Altas) and Top 5 Losers (Maiores Baixas) from the USER'S PORTFOLIO.
+ * 
+ * Logic:
+ * - Iterates over all user assets.
+ * - Uses real-time `regularMarketChangePercent` from `quotes` (Brapi).
+ * - Sorts descending for Winners, ascending for Losers.
+ * - Limits to 5 items per category.
+ */
+export function MarketMovers({ assets = [], quotes }: MarketMoversProps) {
+
+    // Calculate variations for all assets
+    const processedAssets = assets.map(asset => {
+        const quote = quotes?.[asset.ticker]
+        const price = quote?.regularMarketPrice || asset.average_price
+        const change = quote?.regularMarketChangePercent || 0
+        const currency = asset.currency || 'BRL'
+
+        return {
+            ticker: asset.ticker,
+            name: asset.name,
+            price,
+            change,
+            currency
+        }
+    })
+
+    // Sort by Change % Descending (Winners)
+    const winners = [...processedAssets]
+        .filter(a => a.change > 0)
+        .sort((a, b) => b.change - a.change)
+        .slice(0, 5)
+
+    // Sort by Change % Ascending (Losers)
+    const losers = [...processedAssets]
+        .filter(a => a.change < 0)
+        .sort((a, b) => a.change - b.change)
+        .slice(0, 5)
     return (
         <Card className="col-span-1 border-gray-100 dark:border-zinc-800 bg-white dark:bg-zinc-900">
             <CardHeader className="pb-2">
@@ -35,15 +63,18 @@ export function MarketMovers() {
                         <ArrowUp className="w-4 h-4" />
                         <span>Maiores Altas</span>
                     </div>
-                    {movers.winners.map(asset => (
+                    {winners.length === 0 && <span className="text-xs text-muted-foreground italic">Nenhuma alta hoje.</span>}
+                    {winners.map(asset => (
                         <div key={asset.ticker} className="flex items-center justify-between text-sm">
                             <div className="flex flex-col">
                                 <span className="font-bold text-gray-700 dark:text-gray-200">{asset.ticker}</span>
                                 <span className="text-xs text-gray-500">{asset.name}</span>
                             </div>
                             <div className="text-right">
-                                <div className="font-medium text-emerald-600">+{asset.change}%</div>
-                                <div className="text-xs text-gray-500">R$ {asset.price.toFixed(2)}</div>
+                                <div className="font-medium text-emerald-600">+{asset.change.toFixed(2)}%</div>
+                                <div className="text-xs text-gray-500">
+                                    {new Intl.NumberFormat(asset.currency === 'USD' ? 'en-US' : 'pt-BR', { style: 'currency', currency: asset.currency }).format(asset.price)}
+                                </div>
                             </div>
                         </div>
                     ))}
@@ -57,15 +88,18 @@ export function MarketMovers() {
                         <ArrowDown className="w-4 h-4" />
                         <span>Maiores Baixas</span>
                     </div>
-                    {movers.losers.map(asset => (
+                    {losers.length === 0 && <span className="text-xs text-muted-foreground italic">Nenhuma baixa hoje.</span>}
+                    {losers.map(asset => (
                         <div key={asset.ticker} className="flex items-center justify-between text-sm">
                             <div className="flex flex-col">
                                 <span className="font-bold text-gray-700 dark:text-gray-200">{asset.ticker}</span>
                                 <span className="text-xs text-gray-500">{asset.name}</span>
                             </div>
                             <div className="text-right">
-                                <div className="font-medium text-red-500">{asset.change}%</div>
-                                <div className="text-xs text-gray-500">R$ {asset.price.toFixed(2)}</div>
+                                <div className="font-medium text-red-500">{asset.change.toFixed(2)}%</div>
+                                <div className="text-xs text-gray-500">
+                                    {new Intl.NumberFormat(asset.currency === 'USD' ? 'en-US' : 'pt-BR', { style: 'currency', currency: asset.currency }).format(asset.price)}
+                                </div>
                             </div>
                         </div>
                     ))}
