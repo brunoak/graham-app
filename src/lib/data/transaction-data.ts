@@ -36,6 +36,15 @@ export async function getTransactions(page = 1, limit = 10, month?: number, year
     const from = (page - 1) * limit
     const to = from + limit - 1
 
+    const { data: { user } } = await supabase.auth.getUser()
+
+    // Explicit Tenant Check for robustness
+    let tenantId = null
+    if (user) {
+        const { data: profile } = await supabase.from('users').select('tenant_id').eq('id', user.id).single()
+        tenantId = profile?.tenant_id
+    }
+
     let query = supabase
         .from("transactions")
         .select(`
@@ -51,6 +60,11 @@ export async function getTransactions(page = 1, limit = 10, month?: number, year
             account:accounts(name),
             is_recurring
         `, { count: "exact" })
+
+    // If we found a tenant, filter by it. Else rely on RLS (fallback)
+    if (tenantId) {
+        query = query.eq('tenant_id', tenantId)
+    }
 
     if (month !== undefined && year !== undefined) {
         const startDate = new Date(year, month, 1)

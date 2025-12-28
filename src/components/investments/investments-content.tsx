@@ -6,7 +6,7 @@ import { InvestmentsTable } from "@/components/investments/investments-table"
 import { AllocationDonut } from "@/components/investments/allocation-donut"
 import { PortfolioTreemap } from "@/components/investments/portfolio-treemap"
 import { MarketMovers } from "@/components/investments/market-movers-list"
-import { ArkadWidget } from "@/components/dashboard/arkad-widget"
+import { ArkadWidget } from "@/components/arkad/arkad-widget"
 
 import { InvestmentsTicker } from "@/components/investments/investments-ticker"
 import type { Asset } from "@/lib/schemas/investment-schema"
@@ -95,7 +95,7 @@ export function InvestmentsContent({ summary, initialAssets, historyData, divide
                     <MarketMovers assets={initialAssets} quotes={quotes} />
 
                     {/* AI Assistant */}
-                    <ArkadWidget />
+                    <ArkadWidget type="investments" />
                 </div>
             </div>
         </div>

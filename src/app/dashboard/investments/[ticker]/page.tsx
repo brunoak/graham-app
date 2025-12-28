@@ -47,7 +47,7 @@ export default async function AssetPage(props: AssetPageProps) {
 
                 {/* 3. Chart Section */}
                 <section>
-                    <TradingViewWidget ticker={asset.ticker} />
+                    <TradingViewWidget ticker={asset.ticker} type={asset.type} />
                 </section>
 
                 {/* 4. Indicators Section (Real Data) */}

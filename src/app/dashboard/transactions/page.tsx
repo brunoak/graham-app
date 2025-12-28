@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { TransactionsTable } from "@/components/transactions/transactions-table"
 import { DashboardSummary } from "@/components/dashboard/dashboard-summary"
-import { ArkadWidget } from "@/components/dashboard/arkad-widget"
+import { ArkadWidget } from "@/components/arkad/arkad-widget"
 import { getTransactions } from "@/lib/data/transaction-data"
 
 export default async function TransactionsPage() {
@@ -38,7 +38,7 @@ export default async function TransactionsPage() {
 
                 {/* Arkad AI Widget - 25% width */}
                 <div className="lg:col-span-1">
-                    <ArkadWidget />
+                    <ArkadWidget type="finance" />
                 </div>
             </div>
         </div>

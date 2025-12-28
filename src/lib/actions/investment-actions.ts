@@ -24,6 +24,7 @@ async function getAuthenticatedUser() {
 
     if (!profile) throw new Error("Profile not found")
 
+    console.log(`[Arkad Auth Debug] getAuthenticatedUser success. UserID: ${user.id}, TenantID: ${profile.tenant_id}`);
     return { supabase, user, tenant_id: profile.tenant_id }
 }
 

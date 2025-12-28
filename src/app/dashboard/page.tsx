@@ -3,7 +3,7 @@ import { redirect } from "next/navigation"
 import { DashboardSummary } from "@/components/dashboard/dashboard-summary"
 import { RevenueWidget } from "@/components/dashboard/revenue-widget"
 import { TransactionsTable } from "@/components/transactions/transactions-table"
-import { ArkadWidget } from "@/components/dashboard/arkad-widget"
+import { ArkadWidget } from "@/components/arkad/arkad-widget"
 import { InvestmentsOverview } from "@/components/dashboard/investments-overview"
 import { getFinancialSummary, getMonthlyHistory, getCategoryBreakdown } from "@/lib/data/dashboard-data"
 import { getTransactions } from "@/lib/data/transaction-data"
@@ -42,7 +42,7 @@ export default async function DashboardPage() {
                     monthlyData={monthlyHistory}
                     categoryData={categoryBreakdown}
                 />
-                <ArkadWidget />
+                <ArkadWidget type="dashboard" className="col-span-12 lg:col-span-4" />
 
                 {/* Row 2: Investments */}
                 <div className="col-span-12">

@@ -28,7 +28,7 @@ import {
 import Image from "next/image"
 import { logout } from "@/app/auth/actions"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Sheet, SheetContent, SheetTrigger, SheetClose } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetTrigger, SheetClose, SheetTitle } from "@/components/ui/sheet"
 
 const navItems = [
     {
@@ -77,6 +77,7 @@ export function DashboardNavbar({ user }: { user: any }) {
                 </Button>
             </SheetTrigger>
             <SheetContent side="right" className="w-[300px] sm:w-[400px] bg-emerald-600 border-none p-6 flex flex-col gap-6 text-white [&>button]:text-white [&_svg]:text-white z-[60] [&_[data-slot=sheet-close]]:text-white [&_[data-slot=sheet-close]]:opacity-100 [&_[data-slot=sheet-close]_svg]:!h-8 [&_[data-slot=sheet-close]_svg]:!w-8 [&_[data-slot=sheet-close]]:!right-6 [&_[data-slot=sheet-close]]:!top-6">
+                <SheetTitle className="hidden">Menu de Navegação</SheetTitle>
                 <div className="flex flex-col gap-4 mt-8">
                     <SheetClose asChild>
                         <Link href="/profile" className="flex items-center gap-4 text-xl font-medium hover:opacity-80">

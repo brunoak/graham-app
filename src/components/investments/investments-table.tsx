@@ -9,8 +9,9 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
+import { Badge, badgeVariants } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 import {
     DropdownMenu,
     DropdownMenuCheckboxItem,
@@ -22,6 +23,7 @@ import {
 import { TrendingUp, TrendingDown, DollarSign, Building2, Wallet, Filter, Upload, Plus } from "lucide-react"
 import { AddAssetDialog } from "./add-asset-dialog"
 import Link from "next/link"
+import { AssetIcon } from "./asset-icon"
 import type { Asset } from "@/lib/schemas/investment-schema"
 
 import type { MarketQuote } from "@/lib/services/market-service"
@@ -124,9 +126,9 @@ export function InvestmentsTable({ viewCurrency, onViewCurrencyChange, assets, q
                                 <Filter className="h-3.5 w-3.5" />
                                 <span className="hidden sm:inline">Filtrar</span>
                                 {selectedTypes.length > 0 && (
-                                    <Badge variant="secondary" className="ml-1 h-5 px-1.5 rounded-sm lg:hidden">
+                                    <span className={cn(badgeVariants({ variant: "secondary" }), "ml-1 h-5 px-1.5 rounded-sm lg:hidden text-xs")}>
                                         {selectedTypes.length}
-                                    </Badge>
+                                    </span>
                                 )}
                             </Button>
                         </DropdownMenuTrigger>
@@ -279,29 +281,12 @@ export function InvestmentsTable({ viewCurrency, onViewCurrencyChange, assets, q
                                 >
                                     <TableCell className="pl-4">
                                         <div className="flex items-center gap-3">
-                                            {quotes?.[inv.ticker]?.logourl ? (
-                                                <img
-                                                    src={quotes[inv.ticker].logourl}
-                                                    alt={inv.ticker}
-                                                    className="w-8 h-8 rounded-full object-cover bg-white shadow-sm shrink-0"
-                                                />
-                                            ) : (
-                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${inv.type.startsWith('stock') ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/20' :
-                                                    inv.type.startsWith('etf') ? 'bg-cyan-100 text-cyan-600 dark:bg-cyan-900/20' :
-                                                        inv.type.startsWith('reit') ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/20' :
-                                                            inv.type === 'crypto' ? 'bg-purple-100 text-purple-600 dark:bg-purple-900/20' :
-                                                                inv.type === 'treasure' ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/20' :
-                                                                    inv.type === 'fixed_income' ? 'bg-green-100 text-green-600 dark:bg-green-900/20' :
-                                                                        'bg-gray-100 text-gray-600'
-                                                    }`}>
-                                                    {inv.type.startsWith('stock') && <TrendingUp className="h-4 w-4" />}
-                                                    {inv.type.startsWith('etf') && <TrendingUp className="h-4 w-4" />}
-                                                    {inv.type.startsWith('reit') && <Building2 className="h-4 w-4" />}
-                                                    {inv.type === 'crypto' && <Wallet className="h-4 w-4" />}
-                                                    {inv.type === 'treasure' && <DollarSign className="h-4 w-4" />}
-                                                    {inv.type === 'fixed_income' && <DollarSign className="h-4 w-4" />}
-                                                </div>
-                                            )}
+                                            <AssetIcon
+                                                ticker={inv.ticker}
+                                                type={inv.type}
+                                                logourl={quotes?.[inv.ticker]?.logourl}
+                                                className="w-8 h-8"
+                                            />
                                             <div className="flex flex-col">
                                                 <Link href={`/dashboard/investments/${inv.ticker}`} className="hover:underline hover:text-emerald-600 transition-colors">
                                                     <span className="font-medium text-gray-900 dark:text-gray-100">{inv.ticker}</span>
@@ -406,30 +391,12 @@ export function InvestmentsTable({ viewCurrency, onViewCurrencyChange, assets, q
                             href={`/dashboard/investments/${inv.ticker}`}
                             className="p-4 flex gap-3 hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors"
                         >
-                            {/* Icon */}
-                            {quotes?.[inv.ticker]?.logourl ? (
-                                <img
-                                    src={quotes[inv.ticker].logourl}
-                                    alt={inv.ticker}
-                                    className="w-10 h-10 rounded-full object-cover bg-white shadow-sm shrink-0 mt-1"
-                                />
-                            ) : (
-                                <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 mt-1 ${inv.type.startsWith('stock') ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/20' :
-                                    inv.type.startsWith('etf') ? 'bg-cyan-100 text-cyan-600 dark:bg-cyan-900/20' :
-                                        inv.type.startsWith('reit') ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/20' :
-                                            inv.type === 'crypto' ? 'bg-purple-100 text-purple-600 dark:bg-purple-900/20' :
-                                                inv.type === 'treasure' ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/20' :
-                                                    inv.type === 'fixed_income' ? 'bg-green-100 text-green-600 dark:bg-green-900/20' :
-                                                        'bg-gray-100 text-gray-600'
-                                    }`}>
-                                    {inv.type.startsWith('stock') && <TrendingUp className="h-5 w-5" />}
-                                    {inv.type.startsWith('etf') && <TrendingUp className="h-5 w-5" />}
-                                    {inv.type.startsWith('reit') && <Building2 className="h-5 w-5" />}
-                                    {inv.type === 'crypto' && <Wallet className="h-5 w-5" />}
-                                    {inv.type === 'treasure' && <DollarSign className="h-5 w-5" />}
-                                    {inv.type === 'fixed_income' && <DollarSign className="h-5 w-5" />}
-                                </div>
-                            )}
+                            <AssetIcon
+                                ticker={inv.ticker}
+                                type={inv.type}
+                                logourl={quotes?.[inv.ticker]?.logourl}
+                                className="w-10 h-10 mt-1"
+                            />
 
                             <div className="flex-1 space-y-2">
                                 <div className="flex items-start justify-between">

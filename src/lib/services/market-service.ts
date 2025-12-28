@@ -35,20 +35,20 @@ const BRAPI_BASE_URL = "https://brapi.dev/api"
 // Using a placeholder or assuming free tier access.
 const BRAPI_TOKEN = process.env.BRAPI_TOKEN || "public"
 
-// ... imports
-
-// Removed MOCK_FUNDAMENTALS as requested by user.
-// Fundamentals will return null on error, prompting UI to show "Em breve".
+// ...
 
 export async function getMarketQuote(ticker: string): Promise<MarketQuote | null> {
     try {
-        const response = await fetch(`${BRAPI_BASE_URL}/quote/${ticker}?token=${BRAPI_TOKEN}`, {
+        const url = `${BRAPI_BASE_URL}/quote/${ticker}?token=${BRAPI_TOKEN}`
+        const response = await fetch(url, {
             next: { revalidate: 60 }
         })
 
         if (!response.ok) {
-            console.warn(`Brapi API Error: ${response.status}.`)
-            return null
+            // Mask token in logs
+            const maskedUrl = url.replace(BRAPI_TOKEN, "TOKEN")
+            console.warn(`Brapi API Error: ${response.status} for URL: ${maskedUrl}`)
+            throw new Error(`Brapi Error: ${response.status}`)
         }
 
         const data = await response.json()
@@ -62,21 +62,58 @@ export async function getMarketQuote(ticker: string): Promise<MarketQuote | null
             logourl: result.logourl
         }
     } catch (error) {
-        console.error("Error fetching quote:", error)
+        console.warn(`Brapi failed for ${ticker}, trying Yahoo Fallback...`)
+        return getYahooQuote(ticker)
+    }
+}
+
+async function getYahooQuote(ticker: string): Promise<MarketQuote | null> {
+    try {
+        // Yahoo expects .SA for Brazilian stocks
+        // Heuristic: If it looks like a BR stock (e.g. WEGE3, PETR4) and no suffix, add .SA
+        // US stocks (AAPL, VOO) don't need suffix.
+        let text = ticker.toUpperCase();
+        if (!text.includes('.') && (text.match(/^[A-Z]{4}[0-9]+$/))) {
+            text += ".SA";
+        }
+
+        const result = await yahooFinance.quote(text)
+        if (!result) return null;
+
+        let logourl = undefined;
+        try {
+            // Attempt to get website for logo generation (slower, but requested)
+            const profile = await yahooFinance.quoteSummary(text, { modules: ['assetProfile'] });
+            if (profile.assetProfile?.website) {
+                const domain = new URL(profile.assetProfile.website).hostname.replace('www.', '');
+                logourl = `https://logo.clearbit.com/${domain}`;
+            }
+        } catch (e) {
+            // Ignore profile fetch errors (it's optional)
+        }
+
+        return {
+            symbol: result.symbol,
+            regularMarketPrice: result.regularMarketPrice,
+            regularMarketChangePercent: result.regularMarketChangePercent,
+            regularMarketTime: result.regularMarketTime ? new Date(result.regularMarketTime).toISOString() : new Date().toISOString(),
+            logourl: logourl
+        }
+    } catch (err) {
+        console.error(`Yahoo Fallback failed for ${ticker}:`, err)
         return null
     }
 }
 
 export async function getMarketFundamentals(ticker: string): Promise<MarketFundamentals | null> {
     try {
-        const response = await fetch(`${BRAPI_BASE_URL}/quote/${ticker}?token=${BRAPI_TOKEN}&modules=summaryProfile,financialData,defaultKeyStatistics,balanceSheetHistory,incomeStatementHistory,price`, {
+        const response = await fetch(`${BRAPI_BASE_URL}/quote/${ticker}?token=${BRAPI_TOKEN}&modules=summaryProfile,financialData,defaultKeyStatistics,balanceSheetHistory,incomeStatementHistory`, {
             next: { revalidate: 3600 }
         })
 
         if (!response.ok) {
             console.warn(`Brapi Fundamentals API Error: ${response.status}.`)
-            // Return null to trigger "Em breve" state in UI
-            return null
+            throw new Error(`Brapi Error: ${response.status}`)
         }
 
         const data = await response.json()
@@ -106,7 +143,51 @@ export async function getMarketFundamentals(ticker: string): Promise<MarketFunda
             }
         }
     } catch (error) {
-        console.error("Error fetching fundamentals:", error)
+        console.warn(`Brapi Fundamentals failed for ${ticker}, trying Yahoo Fallback...`)
+        return getYahooFundamentals(ticker)
+    }
+}
+
+async function getYahooFundamentals(ticker: string): Promise<MarketFundamentals | null> {
+    try {
+        let text = ticker.toUpperCase();
+        if (!text.includes('.') && (text.match(/^[A-Z]{4}[0-9]+$/))) {
+            text += ".SA";
+        }
+
+        const result = await yahooFinance.quoteSummary(text, {
+            modules: ['summaryDetail', 'financialData', 'defaultKeyStatistics']
+        });
+
+        const stats = result.defaultKeyStatistics;
+        const finance = result.financialData;
+        const summary = result.summaryDetail;
+
+        return {
+            valuation: {
+                dy: summary?.dividendYield || 0,
+                pe: summary?.trailingPE || 0,
+                pvp: stats?.priceToBook || 0,
+                evebitda: stats?.enterpriseToEbitda || 0,
+                evebit: 0, // Yahoo doesn't give EV/EBIT directly easily
+                vpa: stats?.bookValue || 0,
+            },
+            debt: {
+                netDebtPl: 0, // Requires manual calc from balance sheet
+                netDebtEbitda: 0,
+                plAssets: 0
+            },
+            efficiency: {
+                grossMargin: finance?.grossMargins || 0,
+                netMargin: finance?.profitMargins || 0
+            },
+            profitability: {
+                roe: finance?.returnOnEquity || 0,
+                roic: 0 // Requires manual calc
+            }
+        }
+    } catch (err) {
+        console.error(`Yahoo Fundamentals Fallback failed for ${ticker}:`, err)
         return null
     }
 }

@@ -2,6 +2,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft, TrendingUp, TrendingDown, Building2, Wallet, DollarSign } from "lucide-react"
 import Link from "next/link"
+import { AssetIcon } from "@/components/investments/asset-icon"
 import type { Asset } from "@/lib/schemas/investment-schema"
 import type { MarketQuote } from "@/lib/services/market-service"
 
@@ -37,26 +38,12 @@ export function AssetHeader({ asset, quote }: AssetHeaderProps) {
                     </Button>
                 </Link>
 
-                {quote?.logourl ? (
-                    <img
-                        src={quote.logourl}
-                        alt={asset.ticker}
-                        className="w-12 h-12 rounded-full object-cover bg-white shadow-sm shrink-0"
-                    />
-                ) : (
-                    <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${asset.type.startsWith('stock') ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/20' :
-                        asset.type.startsWith('etf') ? 'bg-cyan-100 text-cyan-600 dark:bg-cyan-900/20' :
-                            asset.type.startsWith('reit') ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/20' :
-                                asset.type === 'crypto' ? 'bg-purple-100 text-purple-600 dark:bg-purple-900/20' :
-                                    'bg-gray-100 text-gray-600'
-                        }`}>
-                        {asset.type.startsWith('stock') && <TrendingUp className="h-6 w-6" />}
-                        {asset.type.startsWith('etf') && <TrendingUp className="h-6 w-6" />}
-                        {asset.type.startsWith('reit') && <Building2 className="h-6 w-6" />}
-                        {asset.type === 'crypto' && <Wallet className="h-6 w-6" />}
-                        {(asset.type === 'treasure' || asset.type === 'fixed_income') && <DollarSign className="h-6 w-6" />}
-                    </div>
-                )}
+                <AssetIcon
+                    ticker={asset.ticker}
+                    type={asset.type}
+                    logourl={quote?.logourl}
+                    className="w-12 h-12"
+                />
 
                 <div>
                     <div className="flex items-center gap-2">
