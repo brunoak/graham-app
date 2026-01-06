@@ -15,6 +15,7 @@
 
 import { createClient } from "@/lib/supabase/server"
 import { z } from 'zod'
+import { getMarketQuote } from "@/lib/services/market-service"
 
 // ============================================================================
 // SCHEMAS
@@ -36,9 +37,17 @@ export const ArkadContextSchema = z.object({
         type: z.string(),
         quantity: z.number(),
         averagePrice: z.number(),
+        currentPrice: z.number(),
         currency: z.string(),
         totalCost: z.number(),
+        marketValue: z.number(),
     })),
+    portfolioTotal: z.object({
+        cost: z.number(),
+        marketValue: z.number(),
+        gain: z.number(),
+        gainPercent: z.number(),
+    }),
     transactions: z.object({
         total: z.number(),
         income: z.number(),
@@ -133,16 +142,46 @@ export async function getArkadContext(tenantId: number): Promise<ArkadContext> {
             .eq('tenant_id', tenantId),
     ])
 
-    // Process Assets
-    const assets = (assetsResult.data || []).map(a => ({
-        ticker: a.ticker,
-        name: a.name,
-        type: a.type,
-        quantity: Number(a.quantity),
-        averagePrice: Number(a.average_price),
-        currency: a.currency || 'BRL',
-        totalCost: Number(a.quantity) * Number(a.average_price),
-    }))
+    // Process Assets with Market Quotes
+    const rawAssets = assetsResult.data || []
+
+    // Fetch real-time quotes for all assets in parallel
+    const quotePromises = rawAssets.map(a => getMarketQuote(a.ticker))
+    const quotes = await Promise.all(quotePromises)
+
+    let totalCost = 0
+    let totalMarketValue = 0
+
+    const assets = rawAssets.map((a, index) => {
+        const quote = quotes[index]
+        const quantity = Number(a.quantity)
+        const avgPrice = Number(a.average_price)
+        const currentPrice = quote?.regularMarketPrice ?? avgPrice
+        const cost = quantity * avgPrice
+        const marketValue = quantity * currentPrice
+
+        totalCost += cost
+        totalMarketValue += marketValue
+
+        return {
+            ticker: a.ticker,
+            name: a.name,
+            type: a.type,
+            quantity,
+            averagePrice: avgPrice,
+            currentPrice,
+            currency: a.currency || 'BRL',
+            totalCost: cost,
+            marketValue,
+        }
+    })
+
+    const portfolioTotal = {
+        cost: totalCost,
+        marketValue: totalMarketValue,
+        gain: totalMarketValue - totalCost,
+        gainPercent: totalCost > 0 ? ((totalMarketValue - totalCost) / totalCost) * 100 : 0,
+    }
 
     // Process Transactions
     const transactions = transactionsResult.data || []
@@ -197,6 +236,7 @@ export async function getArkadContext(tenantId: number): Promise<ArkadContext> {
     return {
         tenantId,
         assets,
+        portfolioTotal,
         transactions: {
             total: transactions.length,
             income,
@@ -257,13 +297,19 @@ export function formatArkadContextAsRAG(context: ArkadContext): string {
 
     // 2. Investments
     if (context.assets.length > 0) {
-        const totalInvested = context.assets.reduce((sum, a) => sum + a.totalCost, 0)
+        const { cost, marketValue, gain, gainPercent } = context.portfolioTotal
+        const gainSign = gain >= 0 ? '+' : ''
         rag += "📊 CARTEIRA DE INVESTIMENTOS:\n"
-        rag += `   • Total Investido (Custo): R$ ${totalInvested.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`
+        rag += `   • Valor de Mercado: R$ ${marketValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`
+        rag += `   • Custo Total: R$ ${cost.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`
+        rag += `   • Rentabilidade: ${gainSign}R$ ${gain.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (${gainSign}${gainPercent.toFixed(1)}%)\n`
         rag += `   • Quantidade de Ativos: ${context.assets.length}\n`
         rag += "   • Posições:\n"
         context.assets.forEach(a => {
-            rag += `      - ${a.ticker} (${a.type}): ${a.quantity} cotas @ R$ ${a.averagePrice.toFixed(2)} = R$ ${a.totalCost.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`
+            const assetGain = a.marketValue - a.totalCost
+            const assetGainPct = a.totalCost > 0 ? ((assetGain / a.totalCost) * 100).toFixed(1) : '0'
+            const sign = assetGain >= 0 ? '+' : ''
+            rag += `      - ${a.ticker} (${a.type}): ${a.quantity} cotas @ R$ ${a.currentPrice.toFixed(2)} = R$ ${a.marketValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (${sign}${assetGainPct}%)\n`
         })
         rag += "\n"
     } else {

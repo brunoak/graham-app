@@ -20,6 +20,8 @@ export function ArkadWidget({ type, contextData, className }: ArkadWidgetProps) 
 
     useEffect(() => {
         let mounted = true
+        let timeoutId: NodeJS.Timeout | null = null
+
         const interval = setInterval(() => {
             if (!mounted) return
             setProgress(prev => {
@@ -28,8 +30,17 @@ export function ArkadWidget({ type, contextData, className }: ArkadWidgetProps) 
             })
         }, 300)
 
+        // Add timeout to prevent infinite loading
+        timeoutId = setTimeout(() => {
+            if (mounted && status === 'analyzing') {
+                console.warn("[ArkadWidget] Timeout - falling back to idle")
+                setStatus('idle')
+            }
+        }, 10000) // 10 second timeout
+
         generateInsight().then(text => {
             if (!mounted) return
+            if (timeoutId) clearTimeout(timeoutId)
             if (text) {
                 setInsight(text)
                 setProgress(100)
@@ -37,8 +48,16 @@ export function ArkadWidget({ type, contextData, className }: ArkadWidgetProps) 
             } else {
                 setStatus('idle')
             }
+        }).catch(err => {
+            console.error("[ArkadWidget] Error:", err)
+            if (mounted) setStatus('idle')
         })
-        return () => { mounted = false; clearInterval(interval) }
+
+        return () => {
+            mounted = false
+            clearInterval(interval)
+            if (timeoutId) clearTimeout(timeoutId)
+        }
     }, [type])
 
     const generateInsight = async () => {

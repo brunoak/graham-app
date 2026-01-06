@@ -15,6 +15,18 @@ interface Message {
     content: string
 }
 
+// Safe UUID generator with fallback for environments without crypto.randomUUID
+function generateId(): string {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        return crypto.randomUUID()
+    }
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+        const r = Math.random() * 16 | 0
+        const v = c === 'x' ? r : (r & 0x3 | 0x8)
+        return v.toString(16)
+    })
+}
+
 interface ChatWindowProps {
     initialMessages?: Message[]
     isSidebarOpen?: boolean
@@ -172,7 +184,7 @@ export function ChatWindow({ initialMessages = [], isSidebarOpen = true, onToggl
         // Set up conversation ID if new
         let currentConversationId = conversationId
         if (!currentConversationId) {
-            currentConversationId = crypto.randomUUID()
+            currentConversationId = generateId()
             setConversationId(currentConversationId)
             // Mark this ID as locally created to prevent useEffect from wiping it
             justCreatedIdRef.current = currentConversationId
