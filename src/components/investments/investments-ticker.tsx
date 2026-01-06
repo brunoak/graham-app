@@ -27,8 +27,7 @@ export function InvestmentsTicker({ indices = [] }: InvestmentsTickerProps) {
         prefix: q.symbol.includes("USD") || q.symbol.includes("GSPC") || q.symbol.includes("IXIC") ? "US$" : "" // Simplistic currency detection
     }))
 
-    // If no real data, show nothing or empty? Or just return null to hide ticker?
-    // User wants validation. If I show empty, it means data fetch failed.
+    // If no real data, hide the ticker completely
     if (displayItems.length === 0) return null
 
     return (

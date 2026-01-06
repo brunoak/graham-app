@@ -218,6 +218,8 @@ const yahooFinance = new YahooFinance({
  * 
  * Strategy: Uses Yahoo Finance (yahoo-finance2) because Brapi returns 401 for these specific tickers on free tier.
  * Tickers fetched: ^BVSP (Ibovespa), USDBRL=X (Dolar), ^GSPC (S&P 500), ^IXIC (Nasdaq), BTC-USD (Bitcoin).
+ * 
+ * Note: Yahoo Finance has rate limits. This function gracefully returns empty data on 429 errors.
  */
 export async function getGlobalIndices(): Promise<MarketQuote[]> {
     const tickers = ["^BVSP", "USDBRL=X", "^GSPC", "^IXIC", "BTC-USD"]
@@ -234,8 +236,15 @@ export async function getGlobalIndices(): Promise<MarketQuote[]> {
             regularMarketChangePercent: result.regularMarketChangePercent,
             regularMarketTime: result.regularMarketTime ? new Date(result.regularMarketTime).toISOString() : new Date().toISOString()
         }))
-    } catch (error) {
-        console.error("Error fetching global indices from Yahoo:", error)
+    } catch (error: any) {
+        // Handle rate limiting gracefully
+        const errorMessage = error?.toString() || ''
+        if (errorMessage.includes('429') || errorMessage.includes('Too Many Requests')) {
+            console.warn("[MarketService] Yahoo Finance rate limited (429). Returning empty indices.")
+        } else {
+            console.error("[MarketService] Error fetching global indices:", error)
+        }
+        // Return empty array - UI should handle gracefully
         return []
     }
 }

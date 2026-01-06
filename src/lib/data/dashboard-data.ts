@@ -52,7 +52,7 @@ export async function getFinancialSummary(date: Date = new Date()): Promise<Fina
 
     if (!allTransactions) return { balance: 0, income: 0, expenses: 0, investments: 0, balanceChange: 0, incomeChange: 0, expensesChange: 0, investmentsChange: 0 }
 
-    let totalBalance = 0
+    let totalBalance = 0  // Total acumulado (todas as transações)
     let monthIncome = 0
     let monthExpense = 0
     let lastMonthIncome = 0
@@ -72,47 +72,62 @@ export async function getFinancialSummary(date: Date = new Date()): Promise<Fina
         const tMonth = tDate.getMonth()
         const tYear = tDate.getFullYear()
 
-        // Total Balance (All time)
+        // Total Balance (All time) - Saldo atual total
         totalBalance += amount
 
-        // Current Month
+        // Current Month (Fluxo do mês)
         if (tMonth === targetMonth && tYear === targetYear) {
             if (amount > 0) monthIncome += amount
             else monthExpense += Math.abs(amount)
         }
 
-        // Previous Month
+        // Previous Month (Para calcular %)
         if (tMonth === prevMonth && tYear === prevYear) {
             if (amount > 0) lastMonthIncome += amount
             else lastMonthExpense += Math.abs(amount)
         }
     })
 
-    // Calculate Net Flow for current month to find Start Balance
-    const monthNetFlow = monthIncome - monthExpense
-    const startBalance = Number((totalBalance - monthNetFlow).toFixed(2)) // Balance before this month's activity
+    // Saldo do mês anterior (até o final do mês anterior)
+    const lastMonthEndBalance = allTransactions
+        .filter(t => {
+            const tDate = new Date(t.date)
+            const endOfPrevMonth = new Date(targetYear, targetMonth, 0) // Last day of prev month
+            return tDate <= endOfPrevMonth
+        })
+        .reduce((sum, t) => sum + Number(t.amount), 0)
 
-    // 3. Get Investments Total (Current Position)
-    // Formula: Sum(Quantity * AveragePrice)
+    // 3. Get Investments Total (Current Market Value)
+    // Uses real-time market quotes for consistency across all screens
     const { data: assets } = await supabase
         .from("assets")
-        .select("quantity, average_price")
+        .select("ticker, quantity, average_price")
         .eq("tenant_id", profile.tenant_id)
 
     let totalInvestments = 0
-    if (assets) {
-        totalInvestments = assets.reduce((sum, asset) => {
-            return sum + (Number(asset.quantity) * Number(asset.average_price))
+    if (assets && assets.length > 0) {
+        // Import market service dynamically to avoid circular deps
+        const { getMarketQuote } = await import("@/lib/services/market-service")
+
+        // Fetch market quotes in parallel
+        const quotePromises = assets.map(asset => getMarketQuote(asset.ticker))
+        const quotes = await Promise.all(quotePromises)
+
+        totalInvestments = assets.reduce((sum, asset, index) => {
+            const quote = quotes[index]
+            // Use market price if available, fallback to average_price
+            const price = quote?.regularMarketPrice ?? Number(asset.average_price)
+            return sum + (Number(asset.quantity) * price)
         }, 0)
     }
 
     return {
-        balance: totalBalance,
-        income: monthIncome,
-        expenses: monthExpense,
-        investments: totalInvestments,
+        balance: totalBalance,  // Saldo = Total acumulado (como no DashPlan)
+        income: monthIncome,    // Entradas = Fluxo do mês selecionado
+        expenses: monthExpense, // Saídas = Fluxo do mês selecionado
+        investments: totalInvestments, // Investimentos = Valor de mercado atual
         // Percentages
-        balanceChange: calculateChange(totalBalance, startBalance),
+        balanceChange: calculateChange(totalBalance, lastMonthEndBalance),
         incomeChange: calculateChange(monthIncome, lastMonthIncome),
         expensesChange: calculateChange(monthExpense, lastMonthExpense),
         investmentsChange: 0
