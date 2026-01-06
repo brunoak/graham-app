@@ -86,7 +86,7 @@ export function SummaryCards({
                             {formatCurrency(income)}
                         </span>
                         <CardTitle className="text-sm font-medium text-muted-foreground">
-                            Renda total
+                            Entradas
                         </CardTitle>
                     </div>
                     <div className="h-10 w-10 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
@@ -107,7 +107,7 @@ export function SummaryCards({
                             {formatCurrency(expenses)}
                         </span>
                         <CardTitle className="text-sm font-medium text-muted-foreground">
-                            Despesas totais
+                            Saídas
                         </CardTitle>
                     </div>
                     <div className="h-10 w-10 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">

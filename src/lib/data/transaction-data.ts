@@ -32,19 +32,27 @@ export type TransactionDTO = {
  * Fetches latest transactions with joined relations.
  */
 export async function getTransactions(page = 1, limit = 10, month?: number, year?: number): Promise<{ data: TransactionDTO[], total: number }> {
+    const startTotal = performance.now()
+
     const supabase = await createClient()
     const from = (page - 1) * limit
     const to = from + limit - 1
 
+    // Step 1: Get User
+    const startAuth = performance.now()
     const { data: { user } } = await supabase.auth.getUser()
+    console.log(`⏱️ [getTransactions] Auth: ${(performance.now() - startAuth).toFixed(0)}ms`)
 
-    // Explicit Tenant Check for robustness
+    // Step 2: Get Tenant
+    const startTenant = performance.now()
     let tenantId = null
     if (user) {
         const { data: profile } = await supabase.from('users').select('tenant_id').eq('id', user.id).single()
         tenantId = profile?.tenant_id
     }
+    console.log(`⏱️ [getTransactions] Tenant: ${(performance.now() - startTenant).toFixed(0)}ms`)
 
+    // Step 3: Build Query
     let query = supabase
         .from("transactions")
         .select(`
@@ -74,10 +82,15 @@ export async function getTransactions(page = 1, limit = 10, month?: number, year
             .lte("date", format(endDate, 'yyyy-MM-dd'))
     }
 
+    // Step 4: Execute Query
+    const startQuery = performance.now()
     const { data, count, error } = await query
         .order("date", { ascending: false })
         .order("id", { ascending: false })
         .range(from, to)
+    console.log(`⏱️ [getTransactions] Query: ${(performance.now() - startQuery).toFixed(0)}ms (${count} total, page ${page})`)
+
+    console.log(`⏱️ [getTransactions] TOTAL: ${(performance.now() - startTotal).toFixed(0)}ms`)
 
     if (error) {
         console.error("Error fetching transactions", error)

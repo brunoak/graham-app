@@ -4,18 +4,32 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
+interface TableProps extends React.HTMLAttributes<HTMLTableElement> {
+    noWrapper?: boolean
+}
+
 const Table = React.forwardRef<
     HTMLTableElement,
-    React.HTMLAttributes<HTMLTableElement>
->(({ className, ...props }, ref) => (
-    <div className="relative w-full overflow-auto">
+    TableProps
+>(({ className, noWrapper, ...props }, ref) => {
+    const table = (
         <table
             ref={ref}
             className={cn("w-full caption-bottom text-sm", className)}
             {...props}
         />
-    </div>
-))
+    )
+
+    if (noWrapper) {
+        return table
+    }
+
+    return (
+        <div className="relative w-full overflow-auto">
+            {table}
+        </div>
+    )
+})
 Table.displayName = "Table"
 
 const TableHeader = React.forwardRef<
