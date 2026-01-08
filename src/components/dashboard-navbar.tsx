@@ -13,7 +13,9 @@ import {
     Menu,
     Bell,
     User,
-    LayoutGrid
+    LayoutGrid,
+    ClipboardList,
+    ChevronDown
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ModeToggle } from "@/components/mode-toggle"
@@ -30,7 +32,15 @@ import { logout } from "@/app/auth/actions"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Sheet, SheetContent, SheetTrigger, SheetClose, SheetTitle } from "@/components/ui/sheet"
 
-const navItems = [
+interface NavItem {
+    title: string
+    href: string
+    icon: any
+    premium?: boolean
+    submenu?: { title: string; href: string; icon: any }[]
+}
+
+const navItems: NavItem[] = [
     {
         title: "Dashboards",
         href: "/dashboard",
@@ -45,6 +55,10 @@ const navItems = [
         title: "Investimentos",
         href: "/dashboard/investments",
         icon: PieChart,
+        submenu: [
+            { title: "Carteira", href: "/dashboard/investments", icon: PieChart },
+            { title: "Operações Finalizadas", href: "/dashboard/investments/closed", icon: ClipboardList },
+        ]
     },
     {
         title: "Arkad",
@@ -217,19 +231,48 @@ export function DashboardNavbar({ user }: { user: any }) {
                 <div className="max-w-7xl mx-auto px-4 md:px-8 h-full flex items-center overflow-x-auto no-scrollbar">
                     <nav className="flex items-center gap-1 md:gap-2 h-full">
                         {navItems.map((item) => (
-                            <Link
-                                key={item.href}
-                                href={item.href}
-                                className={cn(
-                                    "flex items-center gap-2 px-4 h-full border-b-2 text-sm font-medium transition-colors whitespace-nowrap",
-                                    pathname === item.href
-                                        ? "border-emerald-500 text-emerald-600 dark:text-emerald-400"
-                                        : "border-transparent text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200 hover:border-gray-200 dark:hover:border-zinc-700"
-                                )}
-                            >
-                                <item.icon className={cn("h-4 w-4", pathname === item.href ? "text-emerald-500" : "text-gray-500")} />
-                                {item.title}
-                            </Link>
+                            item.submenu ? (
+                                <DropdownMenu key={item.href}>
+                                    <DropdownMenuTrigger asChild>
+                                        <button
+                                            className={cn(
+                                                "flex items-center gap-2 px-4 h-full border-b-2 text-sm font-medium transition-colors whitespace-nowrap",
+                                                pathname.startsWith(item.href)
+                                                    ? "border-emerald-500 text-emerald-600 dark:text-emerald-400"
+                                                    : "border-transparent text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200 hover:border-gray-200 dark:hover:border-zinc-700"
+                                            )}
+                                        >
+                                            <item.icon className={cn("h-4 w-4", pathname.startsWith(item.href) ? "text-emerald-500" : "text-gray-500")} />
+                                            {item.title}
+                                            <ChevronDown className="h-3 w-3 opacity-60" />
+                                        </button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="start" className="w-56">
+                                        {item.submenu.map((sub) => (
+                                            <Link key={sub.href} href={sub.href}>
+                                                <DropdownMenuItem className="cursor-pointer">
+                                                    <sub.icon className="mr-2 h-4 w-4" />
+                                                    {sub.title}
+                                                </DropdownMenuItem>
+                                            </Link>
+                                        ))}
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            ) : (
+                                <Link
+                                    key={item.href}
+                                    href={item.href}
+                                    className={cn(
+                                        "flex items-center gap-2 px-4 h-full border-b-2 text-sm font-medium transition-colors whitespace-nowrap",
+                                        pathname === item.href
+                                            ? "border-emerald-500 text-emerald-600 dark:text-emerald-400"
+                                            : "border-transparent text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200 hover:border-gray-200 dark:hover:border-zinc-700"
+                                    )}
+                                >
+                                    <item.icon className={cn("h-4 w-4", pathname === item.href ? "text-emerald-500" : "text-gray-500")} />
+                                    {item.title}
+                                </Link>
+                            )
                         ))}
                     </nav>
                 </div>

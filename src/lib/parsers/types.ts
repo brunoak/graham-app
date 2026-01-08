@@ -64,7 +64,21 @@ export type FileFormat = 'ofx' | 'csv' | 'pdf' | 'xlsx'
 /**
  * Type of source file.
  */
-export type FileSourceType = 'extrato' | 'fatura'
+export type FileSourceType = 'extrato' | 'fatura' | 'nota_corretagem' | 'nota_cambio' | 'b3_movimentacao'
+
+/**
+ * Supported brokers for investment notes.
+ */
+export type BrokerType =
+    | 'clear'
+    | 'xp'
+    | 'rico'
+    | 'modal'
+    | 'btg'
+    | 'inter'
+    | 'nu_invest'
+    | 'avenue'
+    | 'unknown'
 
 /**
  * Supported banks.

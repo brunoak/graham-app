@@ -99,8 +99,14 @@ async function getYahooQuote(ticker: string): Promise<MarketQuote | null> {
             regularMarketTime: result.regularMarketTime ? new Date(result.regularMarketTime).toISOString() : new Date().toISOString(),
             logourl: logourl
         }
-    } catch (err) {
-        console.error(`Yahoo Fallback failed for ${ticker}:`, err)
+    } catch (err: any) {
+        // Suppress noisy errors for expected failures (rate limiting, crumb issues)
+        const errorMessage = err?.message || err?.toString() || ''
+        if (process.env.NODE_ENV === 'development' &&
+            !errorMessage.includes('429') &&
+            !errorMessage.includes('crumb')) {
+            console.warn(`[MarketService] Quote unavailable for ${ticker}`)
+        }
         return null
     }
 }
@@ -186,8 +192,14 @@ async function getYahooFundamentals(ticker: string): Promise<MarketFundamentals 
                 roic: 0 // Requires manual calc
             }
         }
-    } catch (err) {
-        console.error(`Yahoo Fundamentals Fallback failed for ${ticker}:`, err)
+    } catch (err: any) {
+        // Suppress noisy errors for expected failures
+        const errorMessage = err?.message || err?.toString() || ''
+        if (process.env.NODE_ENV === 'development' &&
+            !errorMessage.includes('429') &&
+            !errorMessage.includes('crumb')) {
+            console.warn(`[MarketService] Fundamentals unavailable for ${ticker}`)
+        }
         return null
     }
 }
@@ -213,38 +225,131 @@ const yahooFinance = new YahooFinance({
 // ... existing code ...
 
 /**
- * Fetches global market indices using Yahoo Finance.
- * Used primarily for the Ticker Tape component.
+ * Fetches global market indices with dual-source fallback.
  * 
- * Strategy: Uses Yahoo Finance (yahoo-finance2) because Brapi returns 401 for these specific tickers on free tier.
- * Tickers fetched: ^BVSP (Ibovespa), USDBRL=X (Dolar), ^GSPC (S&P 500), ^IXIC (Nasdaq), BTC-USD (Bitcoin).
+ * Strategy:
+ * 1. Try Brapi first (primary) - supports most BR assets
+ * 2. If Brapi fails, fallback to Yahoo Finance
+ * 3. If both fail, return empty array gracefully
  * 
- * Note: Yahoo Finance has rate limits. This function gracefully returns empty data on 429 errors.
+ * Tickers fetched: IBOV (Ibovespa), USDBRL (Dolar), ^GSPC (S&P 500), ^IXIC (Nasdaq), BTC
  */
 export async function getGlobalIndices(): Promise<MarketQuote[]> {
-    const tickers = ["^BVSP", "USDBRL=X", "^GSPC", "^IXIC", "BTC-USD"]
+    // Brapi tickers (BR-focused) - only what works reliably on Brapi
+    const brapiTickers = ["^BVSP", "BTC"]
+    // Yahoo tickers for complementary data (USD, US indices)
+    const yahooComplementTickers = ["USDBRL=X", "^GSPC", "^IXIC"]
+    // Full Yahoo fallback
+    const yahooTickers = ["^BVSP", "USDBRL=X", "^GSPC", "^IXIC", "BTC-USD"]
+
+    // Try Brapi first for BR data
+    const brapiResults = await fetchBrapiIndices(brapiTickers)
+
+    if (brapiResults.length > 0) {
+        // Brapi worked! Try to get USD and US indices from Yahoo (but don't fail if Yahoo is down)
+        try {
+            const yahooComplement = await fetchYahooIndices(yahooComplementTickers)
+            return [...brapiResults, ...yahooComplement]
+        } catch (e) {
+            // Yahoo failed but Brapi worked - return Brapi data only
+            if (process.env.NODE_ENV === 'development') {
+                console.warn('[MarketService] Yahoo complement failed, returning Brapi only')
+            }
+            return brapiResults
+        }
+    }
+
+    // Brapi returned empty - Fallback to Yahoo for all indices
     try {
-        // Yahoo Finance v2/v3 compat
-        const results = await yahooFinance.quote(tickers)
+        return await fetchYahooIndices(yahooTickers)
+    } catch (e) {
+        if (process.env.NODE_ENV === 'development') {
+            console.warn('[MarketService] Both Brapi and Yahoo failed')
+        }
+        return []
+    }
+}
 
-        // Ensure array (yahooFinance.quote returns array for multiple tickers)
+/**
+ * Fetches indices from Brapi
+ */
+async function fetchBrapiIndices(tickers: string[]): Promise<MarketQuote[]> {
+    const results: MarketQuote[] = []
+
+    for (const ticker of tickers) {
+        try {
+            const url = `${BRAPI_BASE_URL}/quote/${ticker}?token=${BRAPI_TOKEN}`
+            const response = await fetch(url, {
+                next: { revalidate: 120 },
+                signal: AbortSignal.timeout(5000)
+            })
+
+            if (!response.ok) continue
+
+            const data = await response.json()
+            if (data.results?.[0]) {
+                const result = data.results[0]
+                results.push({
+                    symbol: result.symbol,
+                    regularMarketPrice: result.regularMarketPrice,
+                    regularMarketChangePercent: result.regularMarketChangePercent,
+                    regularMarketTime: result.regularMarketTime || new Date().toISOString()
+                })
+            }
+        } catch (e) {
+            // Individual ticker failed, continue with others
+        }
+    }
+
+    return results
+}
+
+/**
+ * Fetches US indices (S&P 500, Nasdaq) from Yahoo
+ */
+async function fetchYahooUSIndices(): Promise<MarketQuote[]> {
+    try {
+        const usTickers = ["^GSPC", "^IXIC"]
+        const results = await Promise.race([
+            yahooFinance.quote(usTickers),
+            new Promise<null>((_, reject) =>
+                setTimeout(() => reject(new Error('timeout')), 5000)
+            )
+        ])
+
+        if (!results) return []
+
         const quotes = Array.isArray(results) ? results : [results]
-
         return quotes.map((result: any) => ({
             symbol: result.symbol,
             regularMarketPrice: result.regularMarketPrice,
             regularMarketChangePercent: result.regularMarketChangePercent,
             regularMarketTime: result.regularMarketTime ? new Date(result.regularMarketTime).toISOString() : new Date().toISOString()
         }))
-    } catch (error: any) {
-        // Handle rate limiting gracefully
-        const errorMessage = error?.toString() || ''
-        if (errorMessage.includes('429') || errorMessage.includes('Too Many Requests')) {
-            console.warn("[MarketService] Yahoo Finance rate limited (429). Returning empty indices.")
-        } else {
-            console.error("[MarketService] Error fetching global indices:", error)
-        }
-        // Return empty array - UI should handle gracefully
+    } catch (e) {
         return []
     }
 }
+
+/**
+ * Fetches all indices from Yahoo (full fallback)
+ */
+async function fetchYahooIndices(tickers: string[]): Promise<MarketQuote[]> {
+    const results = await Promise.race([
+        yahooFinance.quote(tickers),
+        new Promise<null>((_, reject) =>
+            setTimeout(() => reject(new Error('timeout')), 10000)
+        )
+    ])
+
+    if (!results) return []
+
+    const quotes = Array.isArray(results) ? results : [results]
+    return quotes.map((result: any) => ({
+        symbol: result.symbol,
+        regularMarketPrice: result.regularMarketPrice,
+        regularMarketChangePercent: result.regularMarketChangePercent,
+        regularMarketTime: result.regularMarketTime ? new Date(result.regularMarketTime).toISOString() : new Date().toISOString()
+    }))
+}
+

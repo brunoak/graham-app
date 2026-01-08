@@ -38,15 +38,11 @@ export function InvestmentsContent({ summary, initialAssets, historyData, divide
 
     return (
         <div className="space-y-6">
-            <div className="flex flex-col space-y-2">
-                {/* <h2 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">Carteira de Investimentos</h2> */}
-            </div>
-
             {/* Global Summary (Standard) */}
             {summary}
 
-            {/* Global Ticker Marquee */}
-            <InvestmentsTicker indices={globalIndices} />
+            {/* Global Ticker Marquee - Temporarily hidden due to Yahoo Finance rate limits */}
+            {/* <InvestmentsTicker indices={globalIndices} /> */}
 
 
             {/* Main Grid Layout */}

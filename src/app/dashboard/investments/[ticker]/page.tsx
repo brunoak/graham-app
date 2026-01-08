@@ -20,17 +20,22 @@ export default async function AssetPage(props: AssetPageProps) {
     const params = await props.params;
     const { ticker } = params;
 
-    // Parallel Fetching: DB + Market API
-    const [asset, transactions, quote, fundamentals] = await Promise.all([
-        getAssetByTicker(ticker),
-        getInvestmentTransactions(ticker),
-        getMarketQuote(ticker),
-        getMarketFundamentals(ticker)
-    ])
+    // First, get the asset to check its type
+    const asset = await getAssetByTicker(ticker)
 
     if (!asset) {
         notFound()
     }
+
+    // Check if it's a tradable asset (not fixed income)
+    const isTradable = !['treasure', 'fixed_income'].includes(asset.type)
+
+    // Parallel Fetching: Transactions + Market API (only for tradable assets)
+    const [transactions, quote, fundamentals] = await Promise.all([
+        getInvestmentTransactions(ticker),
+        isTradable ? getMarketQuote(ticker) : Promise.resolve(null),
+        isTradable ? getMarketFundamentals(ticker) : Promise.resolve(null)
+    ])
 
     return (
         <div className="container py-8 max-w-[1600px] space-y-8">

@@ -23,22 +23,34 @@ export default async function InvestmentsPage() {
         getGlobalIndices()
     ])
 
-    // Fetch Real-Time Quotes for all assets (Parallel)
-    const quotePromises = assets.map(asset => getMarketQuote(asset.ticker))
+    // Fetch Real-Time Quotes for tradable assets only (skip fixed income)
+    // Fixed income like TESOURO-*, LCI-*, CDB-* don't have market quotes
+    const tradableAssets = assets.filter(asset =>
+        !['treasure', 'fixed_income'].includes(asset.type)
+    )
+
+    const quotePromises = tradableAssets.map(asset => getMarketQuote(asset.ticker))
     const quotesResults = await Promise.all(quotePromises)
 
     const quotesMap: Record<string, MarketQuote> = {}
 
-    // Build Map & Calculate Total Balance
-    let totalRealBalance = 0
-
-    assets.forEach((asset, index) => {
+    // Build Map from tradable assets
+    tradableAssets.forEach((asset, index) => {
         const quote = quotesResults[index]
         if (quote) {
             quotesMap[asset.ticker] = quote
+        }
+    })
+
+    // Calculate Total Balance (all assets)
+    let totalRealBalance = 0
+
+    assets.forEach((asset) => {
+        const quote = quotesMap[asset.ticker]
+        if (quote) {
             totalRealBalance += asset.quantity * quote.regularMarketPrice
         } else {
-            // Fallback to average price if quote fails
+            // Fixed income or failed quote: use average price
             totalRealBalance += asset.quantity * asset.average_price
         }
     })

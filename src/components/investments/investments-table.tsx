@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { TrendingUp, TrendingDown, DollarSign, Building2, Wallet, Filter, Upload, Plus } from "lucide-react"
 import { AddAssetDialog } from "./add-asset-dialog"
+import { ImportBrokerageModal } from "./import-brokerage-modal"
 import Link from "next/link"
 import { AssetIcon } from "./asset-icon"
 import type { Asset } from "@/lib/schemas/investment-schema"
@@ -207,9 +208,7 @@ export function InvestmentsTable({ viewCurrency, onViewCurrencyChange, assets, q
                         </button>
                     </div>
 
-                    <Button variant="outline" size="sm" className="h-9 w-9 p-0 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-zinc-800 flex items-center justify-center">
-                        <Upload className="h-4 w-4" />
-                    </Button>
+                    <ImportBrokerageModal />
 
                     <AddAssetDialog />
                 </div>

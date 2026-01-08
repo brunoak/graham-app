@@ -8,8 +8,8 @@ import { useState } from "react"
 interface ProfitabilityChartProps {
     currency?: string
     totalValue?: number
-    historyData: { name: string, value: number }[]
-    dividendData: { name: string, value: number, breakdown?: { ticker: string, value: number }[] }[]
+    historyData: { name: string, value: number, year?: number }[]
+    dividendData: { name: string, value: number, breakdown?: { ticker: string, value: number }[], year?: number }[]
     exchangeRate?: number
 }
 
@@ -219,11 +219,15 @@ export function ProfitabilityChart({
                                         // Retrieve the original breakdown if available
                                         // "payload.payload" usually contains the original data object passed to Chart
                                         const breakdown = data.breakdown || [];
+                                        const year = data.year;
 
                                         return (
                                             <div className={`rounded-lg shadow-lg border p-3 ${theme === 'dark' ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-gray-100'
                                                 }`}>
-                                                <p className="text-sm font-semibold mb-2 text-gray-900 dark:text-gray-100">{label}</p>
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{label}</p>
+                                                    {year && <span className="text-xs font-semibold text-gray-900 dark:text-gray-100">{year}</span>}
+                                                </div>
 
                                                 {/* Breakdown List (Only for Dividends view) */}
                                                 {viewMode === "dividends" && breakdown.length > 0 && (

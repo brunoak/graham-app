@@ -472,7 +472,7 @@ export async function getInvestedCapitalHistory() {
             lastValue = relevant[relevant.length - 1].value
         }
 
-        result.push({ name: monthKey, value: lastValue })
+        result.push({ name: monthKey, value: lastValue, year: d.getFullYear() })
     }
 
     return result
@@ -522,7 +522,7 @@ export async function getDividendHistory() {
             .map(([ticker, value]) => ({ ticker, value }))
             .sort((a, b) => b.value - a.value) // Highest payers first
 
-        result.push({ name: monthKey, value: total, breakdown })
+        result.push({ name: monthKey, value: total, breakdown, year: d.getFullYear() })
     }
 
     return result
