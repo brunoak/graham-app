@@ -1,19 +1,9 @@
 /**
- * @fileoverview B3 Excel Import Modal Component
+ * @fileoverview Unified Import Modal Component
  * 
- * A dialog component that allows users to import investment movements from B3 Excel files.
- * The modal guides the user through a 3-step process:
- * 
- * 1. **Upload**: Select and upload an XLSX file from B3
- * 2. **Preview**: Review extracted operations before importing
- * 3. **Result**: See import results and any errors
- * 
- * @module components/investments/import-brokerage-modal
- * 
- * @example
- * ```tsx
- * <ImportBrokerageModal onImportComplete={() => refreshAssets()} />
- * ```
+ * A single dialog component for importing investment data from:
+ * 1. B3 XLSX movements (Brazilian market)
+ * 2. PDF brokerage notes (multiple brokers)
  */
 
 "use client"
@@ -31,6 +21,15 @@ import {
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 import {
     Table,
     TableBody,
@@ -42,6 +41,7 @@ import {
 import {
     Upload,
     FileSpreadsheet,
+    FileText,
     CheckCircle2,
     XCircle,
     AlertCircle,
@@ -49,11 +49,18 @@ import {
     ArrowRight,
     TrendingUp,
     TrendingDown,
+    Lock,
     ExternalLink,
     Coins,
 } from "lucide-react"
 import { toast } from "sonner"
 import { parseB3XLSX, type B3Operation } from "@/lib/parsers/b3-xlsx-parser"
+import {
+    parseBrokerageNotePDF,
+    SUPPORTED_BROKERS,
+    type ParserType,
+    type ParsedOperation
+} from "@/lib/services/pdf-parser-service"
 import { createInvestmentTransaction } from "@/lib/actions/investment-actions"
 import type { AssetType } from "@/lib/schemas/investment-schema"
 
@@ -61,40 +68,69 @@ import type { AssetType } from "@/lib/schemas/investment-schema"
 // Types
 // ============================================
 
-interface ImportBrokerageModalProps {
-    /** Callback fired after successful import */
+interface UnifiedImportModalProps {
     onImportComplete?: () => void
 }
 
-interface SelectableOperation extends B3Operation {
+// Unified operation type from either source
+interface SelectableOperation {
+    ticker: string
+    name?: string
+    type: "buy" | "sell" | "dividend"
+    quantity: number
+    price: number
+    total: number
+    date: Date
+    assetType: string
+    currency: string
     selected: boolean
 }
 
+type ImportSource = "b3-xlsx" | "pdf-corretora"
 type ImportStep = "upload" | "preview" | "result"
+
+// Asset type mapping
+const ASSET_TYPE_MAP: Record<string, AssetType> = {
+    'stock_br': 'stock_br',
+    'stock_us': 'stock_us',
+    'reit_br': 'reit_br',
+    'reit_us': 'reit_us',
+    'etf_br': 'etf_br',
+    'etf_us': 'etf_us',
+    'crypto': 'crypto',
+    'fixed_income': 'fixed_income',
+    'fixed_income_us': 'fixed_income_us',
+    'treasure': 'treasure',
+    'fund': 'fund',
+    'fiagro': 'fiagro',
+    'fund_exempt': 'fund_exempt',
+    'cash': 'cash',
+    'bdr': 'stock_br',
+    'option': 'stock_us',
+    'other': 'stock_br',
+}
 
 // ============================================
 // Component
 // ============================================
 
-/**
- * ImportBrokerageModal - Modal for importing B3 Excel movements
- * 
- * Features:
- * - Drag and drop file upload
- * - Client-side XLSX parsing
- * - Selective operation import
- * - Progress feedback
- * - Integration with existing investment actions
- */
-export function ImportBrokerageModal({ onImportComplete }: ImportBrokerageModalProps) {
+export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps) {
     // State
     const [open, setOpen] = useState(false)
+    const [importSource, setImportSource] = useState<ImportSource>("b3-xlsx")
     const [step, setStep] = useState<ImportStep>("upload")
     const [file, setFile] = useState<File | null>(null)
     const [loading, setLoading] = useState(false)
     const [operations, setOperations] = useState<SelectableOperation[]>([])
-    const [parseErrors, setParseErrors] = useState<string[]>([])
+    const [warnings, setWarnings] = useState<string[]>([])
     const [dateRange, setDateRange] = useState<{ start: Date; end: Date } | null>(null)
+
+    // PDF-specific state
+    const [parserType, setParserType] = useState<ParserType>("br-nota")
+    const [password, setPassword] = useState("")
+    const [brokerName, setBrokerName] = useState<string | null>(null)
+
+    // Result state
     const [importResult, setImportResult] = useState<{
         success: boolean
         message: string
@@ -103,22 +139,27 @@ export function ImportBrokerageModal({ onImportComplete }: ImportBrokerageModalP
         errors: string[]
     } | null>(null)
 
+    // Get broker config
+    const brokerConfig = SUPPORTED_BROKERS[parserType]
+    const isPDF = importSource === "pdf-corretora"
+
     // ========================================
     // Handlers
     // ========================================
 
-    /**
-     * Handles file selection from input or drag-drop
-     */
     const handleFileSelect = useCallback((selectedFile: File) => {
-        const validTypes = [
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            "application/vnd.ms-excel"
-        ]
+        const filename = selectedFile.name.toLowerCase()
 
-        if (!validTypes.includes(selectedFile.type) && !selectedFile.name.endsWith('.xlsx')) {
-            toast.error("Por favor, selecione um arquivo Excel (.xlsx)")
-            return
+        if (isPDF) {
+            if (!filename.endsWith('.pdf') && !filename.endsWith('.csv')) {
+                toast.error("Por favor, selecione um arquivo PDF ou CSV")
+                return
+            }
+        } else {
+            if (!filename.endsWith('.xlsx') && !filename.endsWith('.xls')) {
+                toast.error("Por favor, selecione um arquivo Excel (.xlsx)")
+                return
+            }
         }
 
         if (selectedFile.size > 10 * 1024 * 1024) {
@@ -127,52 +168,95 @@ export function ImportBrokerageModal({ onImportComplete }: ImportBrokerageModalP
         }
 
         setFile(selectedFile)
-    }, [])
+    }, [isPDF])
 
-    /**
-     * Parses the uploaded Excel file client-side
-     */
     const handleParse = useCallback(async () => {
         if (!file) return
 
         setLoading(true)
-        setParseErrors([])
+        setWarnings([])
 
         try {
-            const buffer = await file.arrayBuffer()
-            const result = await parseB3XLSX(buffer)
+            if (isPDF) {
+                // Parse PDF
+                const result = await parseBrokerageNotePDF(file, parserType, {
+                    password: password || undefined,
+                    debug: false
+                })
 
-            if (result.errorCount > 0 && result.successCount === 0) {
-                toast.error("Não foi possível extrair operações do arquivo")
-                setParseErrors(result.errors)
-                return
+                if (!result.success && result.operations.length === 0) {
+                    toast.error("Não foi possível extrair operações do arquivo")
+                    setWarnings(result.warnings)
+                    return
+                }
+
+                // Convert to unified format
+                setOperations(
+                    result.operations.map(op => ({
+                        ticker: op.ticker,
+                        name: op.name,
+                        type: op.type as "buy" | "sell",
+                        quantity: op.quantity,
+                        price: op.price,
+                        total: op.total,
+                        date: op.trade_date ? new Date(op.trade_date) : new Date(),
+                        assetType: op.asset_type,
+                        currency: op.currency,
+                        selected: true
+                    }))
+                )
+
+                setBrokerName(result.broker || null)
+                setWarnings(result.warnings)
+
+            } else {
+                // Parse B3 XLSX
+                const buffer = await file.arrayBuffer()
+                const result = await parseB3XLSX(buffer)
+
+                if (result.errorCount > 0 && result.successCount === 0) {
+                    toast.error("Não foi possível extrair operações do arquivo")
+                    setWarnings(result.errors)
+                    return
+                }
+
+                // Convert to unified format
+                setOperations(
+                    result.operations.map(op => ({
+                        ticker: op.ticker,
+                        name: op.name,
+                        type: op.type,
+                        quantity: op.quantity,
+                        price: op.price,
+                        total: op.total,
+                        date: op.date,
+                        assetType: op.assetType,
+                        currency: "BRL",
+                        selected: true
+                    }))
+                )
+
+                setDateRange(result.dateRange || null)
+                setWarnings(result.errors)
             }
 
-            // Set operations with selection state
-            setOperations(
-                result.operations.map(op => ({
-                    ...op,
-                    selected: true
-                }))
-            )
-
-            setDateRange(result.dateRange || null)
-            setParseErrors(result.errors)
             setStep("preview")
-
-            toast.success(`${result.successCount} operações encontradas`)
+            toast.success(`${operations.length > 0 ? operations.length : "Operações"} encontradas`)
 
         } catch (error) {
-            console.error("Error parsing B3 Excel:", error)
-            toast.error(error instanceof Error ? error.message : "Erro ao processar arquivo")
+            console.error("Error parsing file:", error)
+            const message = error instanceof Error ? error.message : "Erro ao processar arquivo"
+
+            if (message.includes("password")) {
+                toast.error("PDF protegido por senha. Informe seu CPF.")
+            } else {
+                toast.error(message)
+            }
         } finally {
             setLoading(false)
         }
-    }, [file])
+    }, [file, isPDF, parserType, password, operations.length])
 
-    /**
-     * Imports selected operations to the database
-     */
     const handleImport = useCallback(async () => {
         const selectedOps = operations.filter(op => op.selected)
         if (selectedOps.length === 0) {
@@ -187,25 +271,25 @@ export function ImportBrokerageModal({ onImportComplete }: ImportBrokerageModalP
         const errors: string[] = []
 
         try {
-            // Import each operation individually
             for (const op of selectedOps) {
                 try {
                     await createInvestmentTransaction({
                         ticker: op.ticker,
-                        type: op.type,
+                        type: op.type === "dividend" ? "buy" : op.type,
                         date: op.date,
                         quantity: op.quantity,
                         price: op.price,
                         fees: 0,
                         total: op.total,
-                        assetType: op.assetType as AssetType,
+                        assetType: (ASSET_TYPE_MAP[op.assetType] || 'stock_br') as AssetType,
                         assetName: op.name,
-                        currency: "BRL"
+                        currency: op.currency
                     })
                     successCount++
-                } catch (err: any) {
+                } catch (err: unknown) {
                     errorCount++
-                    errors.push(`${op.ticker}: ${err.message}`)
+                    const message = err instanceof Error ? err.message : 'Unknown error'
+                    errors.push(`${op.ticker}: ${message}`)
                 }
             }
 
@@ -214,24 +298,25 @@ export function ImportBrokerageModal({ onImportComplete }: ImportBrokerageModalP
                 ? `${successCount} operações importadas com sucesso!`
                 : `${successCount} importadas, ${errorCount} erros`
 
-            setImportResult({
-                success,
-                message,
-                successCount,
-                errorCount,
-                errors
-            })
-
-            setStep("result")
-
             if (success) {
                 toast.success(message)
                 onImportComplete?.()
+                // Show success screen briefly, then auto-close
+                setImportResult({ success, message, successCount, errorCount, errors })
+                setStep("result")
+                setTimeout(() => {
+                    setOpen(false)
+                    resetModal()
+                }, 2000)
             } else if (successCount > 0) {
                 toast.warning(message)
                 onImportComplete?.()
+                setImportResult({ success, message, successCount, errorCount, errors })
+                setStep("result")
             } else {
                 toast.error(message)
+                setImportResult({ success, message, successCount, errorCount, errors })
+                setStep("result")
             }
 
         } catch (error) {
@@ -242,54 +327,46 @@ export function ImportBrokerageModal({ onImportComplete }: ImportBrokerageModalP
         }
     }, [operations, onImportComplete])
 
-    /**
-     * Toggles selection of an operation
-     */
     const toggleOperation = useCallback((index: number) => {
         setOperations(prev => prev.map((op, i) =>
             i === index ? { ...op, selected: !op.selected } : op
         ))
     }, [])
 
-    /**
-     * Toggles all operations selection
-     */
     const toggleAllOperations = useCallback((checked: boolean) => {
         setOperations(prev => prev.map(op => ({ ...op, selected: checked })))
     }, [])
 
-    /**
-     * Resets the modal to initial state
-     */
     const resetModal = useCallback(() => {
         setStep("upload")
         setFile(null)
+        setPassword("")
         setOperations([])
-        setParseErrors([])
+        setWarnings([])
         setDateRange(null)
+        setBrokerName(null)
         setImportResult(null)
     }, [])
 
-    /**
-     * Formats currency value
-     */
-    const formatCurrency = (value: number) => {
-        return new Intl.NumberFormat("pt-BR", {
+    const handleSourceChange = useCallback((source: ImportSource) => {
+        setImportSource(source)
+        setFile(null)
+        setPassword("")
+        setWarnings([])
+    }, [])
+
+    const formatCurrency = (value: number, currency: string = "BRL") => {
+        const locale = currency === "USD" ? "en-US" : "pt-BR"
+        return new Intl.NumberFormat(locale, {
             style: "currency",
-            currency: "BRL"
+            currency: currency
         }).format(value)
     }
 
-    /**
-     * Formats date
-     */
     const formatDate = (date: Date) => {
         return new Date(date).toLocaleDateString("pt-BR")
     }
 
-    /**
-     * Gets type badge variant
-     */
     const getTypeBadge = (type: string) => {
         switch (type) {
             case "buy":
@@ -312,9 +389,7 @@ export function ImportBrokerageModal({ onImportComplete }: ImportBrokerageModalP
         }
     }
 
-    // Computed values
     const selectedCount = operations.filter(op => op.selected).length
-    const totalFees = 0 // B3 doesn't include fees
 
     // ========================================
     // Render
@@ -329,22 +404,27 @@ export function ImportBrokerageModal({ onImportComplete }: ImportBrokerageModalP
                 <Button
                     variant="outline"
                     size="sm"
-                    className="h-9 w-9 p-0 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-zinc-800 flex items-center justify-center"
-                    title="Importar Movimentações B3"
+                    className="h-9 gap-2 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-zinc-800"
+                    title="Importar Movimentações"
                 >
                     <Upload className="h-4 w-4" />
+                    <span className="hidden sm:inline">Importar</span>
                 </Button>
             </DialogTrigger>
 
             <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
-                        <FileSpreadsheet className="h-5 w-5 text-emerald-600" />
-                        Importar Movimentações da B3
+                        {isPDF ? (
+                            <FileText className="h-5 w-5 text-blue-600" />
+                        ) : (
+                            <FileSpreadsheet className="h-5 w-5 text-emerald-600" />
+                        )}
+                        {isPDF ? "Importar Nota de Corretagem" : "Importar Movimentações B3"}
                     </DialogTitle>
                     <DialogDescription>
-                        {step === "upload" && "Envie o arquivo Excel de movimentação baixado do portal B3."}
-                        {step === "preview" && "Revise as operações encontradas e selecione quais deseja importar."}
+                        {step === "upload" && "Selecione a fonte dos dados e faça upload do arquivo."}
+                        {step === "preview" && "Revise as operações e selecione quais deseja importar."}
                         {step === "result" && "Confira o resultado da importação."}
                     </DialogDescription>
                 </DialogHeader>
@@ -370,28 +450,102 @@ export function ImportBrokerageModal({ onImportComplete }: ImportBrokerageModalP
                 {/* Step: Upload */}
                 {step === "upload" && (
                     <div className="space-y-4">
+                        {/* Source Selector */}
+                        <div className="space-y-2">
+                            <Label>Fonte dos Dados</Label>
+                            <Select value={importSource} onValueChange={(v) => handleSourceChange(v as ImportSource)}>
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="b3-xlsx">
+                                        <div className="flex items-center gap-2">
+                                            <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+                                            <span>Movimentações B3 (Excel)</span>
+                                        </div>
+                                    </SelectItem>
+                                    <SelectItem value="pdf-corretora">
+                                        <div className="flex items-center gap-2">
+                                            <FileText className="h-4 w-4 text-blue-600" />
+                                            <span>Nota de Corretagem (PDF)</span>
+                                        </div>
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+
                         {/* B3 Instructions */}
-                        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-lg p-4">
-                            <div className="flex gap-3">
-                                <AlertCircle className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
-                                <div className="text-sm text-blue-800 dark:text-blue-200">
-                                    <p className="font-medium">Como baixar o arquivo da B3:</p>
-                                    <ol className="mt-2 space-y-1 list-decimal list-inside text-blue-700 dark:text-blue-300">
-                                        <li>Acesse <a href="https://www.investidor.b3.com.br" target="_blank" rel="noopener noreferrer" className="underline hover:no-underline inline-flex items-center gap-1">investidor.b3.com.br <ExternalLink className="h-3 w-3" /></a></li>
-                                        <li>Faça login e vá em <strong>Extratos</strong></li>
-                                        <li>Selecione a aba <strong>Movimentação</strong></li>
-                                        <li>Escolha o período desejado</li>
-                                        <li>Clique em <strong>BAIXAR</strong> (Excel)</li>
-                                    </ol>
+                        {!isPDF && (
+                            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-lg p-4">
+                                <div className="flex gap-3">
+                                    <AlertCircle className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
+                                    <div className="text-sm text-blue-800 dark:text-blue-200">
+                                        <p className="font-medium">Como baixar o arquivo da B3:</p>
+                                        <ol className="mt-2 space-y-1 list-decimal list-inside text-blue-700 dark:text-blue-300">
+                                            <li>Acesse <a href="https://www.investidor.b3.com.br" target="_blank" rel="noopener noreferrer" className="underline hover:no-underline inline-flex items-center gap-1">investidor.b3.com.br <ExternalLink className="h-3 w-3" /></a></li>
+                                            <li>Faça login e vá em <strong>Extratos</strong></li>
+                                            <li>Selecione a aba <strong>Movimentação</strong></li>
+                                            <li>Escolha o período desejado</li>
+                                            <li>Clique em <strong>BAIXAR</strong> (Excel)</li>
+                                        </ol>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
+                        )}
+
+                        {/* PDF Options */}
+                        {isPDF && (
+                            <>
+                                {/* Broker Selector */}
+                                <div className="space-y-2">
+                                    <Label>Corretora</Label>
+                                    <Select value={parserType} onValueChange={(v) => setParserType(v as ParserType)}>
+                                        <SelectTrigger>
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {Object.entries(SUPPORTED_BROKERS).map(([key, broker]) => (
+                                                <SelectItem key={key} value={key}>
+                                                    <div className="flex items-center gap-2">
+                                                        {broker.label}
+                                                        <span className="text-xs text-gray-500">({broker.currency})</span>
+                                                    </div>
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <p className="text-xs text-gray-500">{brokerConfig.description}</p>
+                                </div>
+
+                                {/* Password field */}
+                                {brokerConfig.requiresPassword && (
+                                    <div className="space-y-2">
+                                        <Label className="flex items-center gap-2">
+                                            <Lock className="h-4 w-4" />
+                                            Senha do PDF
+                                        </Label>
+                                        <Input
+                                            type="password"
+                                            placeholder={brokerConfig.passwordHint}
+                                            value={password}
+                                            onChange={(e) => setPassword(e.target.value)}
+                                        />
+                                        <p className="text-xs text-gray-500">
+                                            Rico, XP, Clear e BTG usam seu CPF como senha.
+                                        </p>
+                                    </div>
+                                )}
+                            </>
+                        )}
 
                         {/* File Drop Zone */}
                         <div
                             className={`
                                 relative border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer
-                                ${file ? "border-emerald-300 bg-emerald-50 dark:bg-emerald-900/10" : "border-gray-200 dark:border-zinc-700 hover:border-emerald-300"}
+                                ${file
+                                    ? (isPDF ? "border-blue-300 bg-blue-50 dark:bg-blue-900/10" : "border-emerald-300 bg-emerald-50 dark:bg-emerald-900/10")
+                                    : "border-gray-200 dark:border-zinc-700 hover:border-emerald-300"
+                                }
                             `}
                             onDragOver={(e) => e.preventDefault()}
                             onDrop={(e) => {
@@ -402,7 +556,11 @@ export function ImportBrokerageModal({ onImportComplete }: ImportBrokerageModalP
                         >
                             {file ? (
                                 <div className="space-y-2">
-                                    <FileSpreadsheet className="h-12 w-12 mx-auto text-emerald-600" />
+                                    {isPDF ? (
+                                        <FileText className="h-12 w-12 mx-auto text-blue-600" />
+                                    ) : (
+                                        <FileSpreadsheet className="h-12 w-12 mx-auto text-emerald-600" />
+                                    )}
                                     <p className="font-medium">{file.name}</p>
                                     <p className="text-sm text-gray-500">
                                         {(file.size / 1024).toFixed(1)} KB
@@ -419,16 +577,16 @@ export function ImportBrokerageModal({ onImportComplete }: ImportBrokerageModalP
                                 <div className="space-y-2">
                                     <Upload className="h-12 w-12 mx-auto text-gray-400" />
                                     <p className="font-medium">
-                                        Arraste o arquivo Excel aqui ou clique para selecionar
+                                        Arraste o arquivo aqui ou clique para selecionar
                                     </p>
                                     <p className="text-sm text-gray-500">
-                                        Formato: Excel (.xlsx) exportado do portal B3
+                                        {isPDF ? "Formato: PDF da nota de corretagem" : "Formato: Excel (.xlsx) exportado do portal B3"}
                                     </p>
                                 </div>
                             )}
                             <input
                                 type="file"
-                                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                                accept={isPDF ? ".pdf,.csv" : ".xlsx,.xls"}
                                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                                 onChange={(e) => {
                                     const selectedFile = e.target.files?.[0]
@@ -437,18 +595,18 @@ export function ImportBrokerageModal({ onImportComplete }: ImportBrokerageModalP
                             />
                         </div>
 
-                        {/* Parse Errors */}
-                        {parseErrors.length > 0 && (
-                            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
-                                <p className="font-medium text-red-800 dark:text-red-200 mb-2">
-                                    Erros encontrados:
+                        {/* Warnings */}
+                        {warnings.length > 0 && (
+                            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+                                <p className="font-medium text-yellow-800 dark:text-yellow-200 mb-2">
+                                    Avisos:
                                 </p>
-                                <ul className="text-sm text-red-700 dark:text-red-300 space-y-1">
-                                    {parseErrors.slice(0, 5).map((error, i) => (
-                                        <li key={i}>• {error}</li>
+                                <ul className="text-sm text-yellow-700 dark:text-yellow-300 space-y-1">
+                                    {warnings.slice(0, 5).map((warning, i) => (
+                                        <li key={i}>• {warning}</li>
                                     ))}
-                                    {parseErrors.length > 5 && (
-                                        <li>...e mais {parseErrors.length - 5} erros</li>
+                                    {warnings.length > 5 && (
+                                        <li>...e mais {warnings.length - 5}</li>
                                     )}
                                 </ul>
                             </div>
@@ -471,11 +629,22 @@ export function ImportBrokerageModal({ onImportComplete }: ImportBrokerageModalP
                             </div>
                             <div className="bg-gray-50 dark:bg-zinc-800 rounded-lg p-3 text-center">
                                 <p className="text-sm font-medium">
-                                    {dateRange ? `${formatDate(dateRange.start)} - ${formatDate(dateRange.end)}` : "-"}
+                                    {isPDF && brokerName ? brokerName :
+                                        dateRange ? `${formatDate(dateRange.start)} - ${formatDate(dateRange.end)}` : "—"}
                                 </p>
-                                <p className="text-xs text-gray-500">Período</p>
+                                <p className="text-xs text-gray-500">{isPDF ? "Corretora" : "Período"}</p>
                             </div>
                         </div>
+
+                        {/* Warnings */}
+                        {warnings.length > 0 && (
+                            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
+                                <div className="flex items-center gap-2 text-yellow-800 dark:text-yellow-200">
+                                    <AlertCircle className="h-4 w-4" />
+                                    <span className="text-sm">{warnings.join(", ")}</span>
+                                </div>
+                            </div>
+                        )}
 
                         {/* Operations Table */}
                         <div className="border rounded-lg overflow-hidden max-h-[300px] overflow-y-auto">
@@ -509,10 +678,10 @@ export function ImportBrokerageModal({ onImportComplete }: ImportBrokerageModalP
                                             </TableCell>
                                             <TableCell>{getTypeBadge(op.type)}</TableCell>
                                             <TableCell className="font-medium">{op.ticker}</TableCell>
-                                            <TableCell className="text-right">{op.quantity}</TableCell>
-                                            <TableCell className="text-right">{formatCurrency(op.price)}</TableCell>
+                                            <TableCell className="text-right">{op.quantity.toLocaleString()}</TableCell>
+                                            <TableCell className="text-right">{formatCurrency(op.price, op.currency)}</TableCell>
                                             <TableCell className="text-right font-medium">
-                                                {formatCurrency(op.total)}
+                                                {formatCurrency(op.total, op.currency)}
                                             </TableCell>
                                         </TableRow>
                                     ))}
@@ -643,3 +812,5 @@ export function ImportBrokerageModal({ onImportComplete }: ImportBrokerageModalP
     )
 }
 
+// Re-export for convenience with old name
+export { UnifiedImportModal as ImportBrokerageModal }

@@ -41,7 +41,7 @@ export function InvestmentsContent({ summary, initialAssets, historyData, divide
             {/* Global Summary (Standard) */}
             {summary}
 
-            {/* Global Ticker Marquee - Temporarily hidden due to Yahoo Finance rate limits */}
+            {/* Global Ticker Marquee - Disabled to save API requests (enable with Brapi Pro) */}
             {/* <InvestmentsTicker indices={globalIndices} /> */}
 
 

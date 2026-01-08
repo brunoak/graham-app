@@ -41,7 +41,7 @@ export async function getMarketQuote(ticker: string): Promise<MarketQuote | null
     try {
         const url = `${BRAPI_BASE_URL}/quote/${ticker}?token=${BRAPI_TOKEN}`
         const response = await fetch(url, {
-            next: { revalidate: 60 }
+            next: { revalidate: 300 } // 5 min cache to reduce API calls
         })
 
         if (!response.ok) {
@@ -235,39 +235,22 @@ const yahooFinance = new YahooFinance({
  * Tickers fetched: IBOV (Ibovespa), USDBRL (Dolar), ^GSPC (S&P 500), ^IXIC (Nasdaq), BTC
  */
 export async function getGlobalIndices(): Promise<MarketQuote[]> {
-    // Brapi tickers (BR-focused) - only what works reliably on Brapi
+    // Brapi tickers - free tier supports IBOV and BTC
+    // Note: USDBRL requires Brapi paid plan (401), Yahoo has rate limits (429)
     const brapiTickers = ["^BVSP", "BTC"]
-    // Yahoo tickers for complementary data (USD, US indices)
-    const yahooComplementTickers = ["USDBRL=X", "^GSPC", "^IXIC"]
-    // Full Yahoo fallback
-    const yahooTickers = ["^BVSP", "USDBRL=X", "^GSPC", "^IXIC", "BTC-USD"]
 
-    // Try Brapi first for BR data
+    // Try Brapi for all indices
     const brapiResults = await fetchBrapiIndices(brapiTickers)
 
     if (brapiResults.length > 0) {
-        // Brapi worked! Try to get USD and US indices from Yahoo (but don't fail if Yahoo is down)
-        try {
-            const yahooComplement = await fetchYahooIndices(yahooComplementTickers)
-            return [...brapiResults, ...yahooComplement]
-        } catch (e) {
-            // Yahoo failed but Brapi worked - return Brapi data only
-            if (process.env.NODE_ENV === 'development') {
-                console.warn('[MarketService] Yahoo complement failed, returning Brapi only')
-            }
-            return brapiResults
-        }
+        return brapiResults
     }
 
-    // Brapi returned empty - Fallback to Yahoo for all indices
-    try {
-        return await fetchYahooIndices(yahooTickers)
-    } catch (e) {
-        if (process.env.NODE_ENV === 'development') {
-            console.warn('[MarketService] Both Brapi and Yahoo failed')
-        }
-        return []
+    // Brapi failed - return empty (Yahoo is unreliable due to rate limits)
+    if (process.env.NODE_ENV === 'development') {
+        console.warn('[MarketService] Brapi failed for indices')
     }
+    return []
 }
 
 /**
@@ -280,7 +263,7 @@ async function fetchBrapiIndices(tickers: string[]): Promise<MarketQuote[]> {
         try {
             const url = `${BRAPI_BASE_URL}/quote/${ticker}?token=${BRAPI_TOKEN}`
             const response = await fetch(url, {
-                next: { revalidate: 120 },
+                next: { revalidate: 300 }, // 5 min cache to reduce API calls
                 signal: AbortSignal.timeout(5000)
             })
 
