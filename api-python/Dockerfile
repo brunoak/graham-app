@@ -14,8 +14,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Make start script executable
-RUN chmod +x start.sh
+# Convert CRLF to LF (Windows -> Linux line endings) and make executable
+RUN sed -i 's/\r$//' start.sh && chmod +x start.sh
 
 # Expose port (Railway provides PORT dynamically)
 EXPOSE 8000
