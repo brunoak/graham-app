@@ -17,5 +17,5 @@ COPY . .
 # Expose port (Railway provides PORT dynamically)
 EXPOSE 8000
 
-# Run with uvicorn - use shell form to allow $PORT substitution
-CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}
+# Run with uvicorn - explicit shell to expand $PORT
+CMD ["/bin/sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
