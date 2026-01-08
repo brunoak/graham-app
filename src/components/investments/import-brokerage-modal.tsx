@@ -55,6 +55,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { parseB3XLSX, type B3Operation } from "@/lib/parsers/b3-xlsx-parser"
+import { parseMyProfitXLSX, type MyProfitOperation } from "@/lib/parsers/myprofit-xlsx-parser"
 import {
     parseBrokerageNotePDF,
     SUPPORTED_BROKERS,
@@ -86,7 +87,7 @@ interface SelectableOperation {
     selected: boolean
 }
 
-type ImportSource = "b3-xlsx" | "pdf-corretora"
+type ImportSource = "b3-xlsx" | "myprofit-xlsx" | "pdf-corretora"
 type ImportStep = "upload" | "preview" | "result"
 
 // Asset type mapping
@@ -118,6 +119,7 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
     // State
     const [open, setOpen] = useState(false)
     const [importSource, setImportSource] = useState<ImportSource>("b3-xlsx")
+    const isMyProfit = importSource === "myprofit-xlsx"
     const [step, setStep] = useState<ImportStep>("upload")
     const [file, setFile] = useState<File | null>(null)
     const [loading, setLoading] = useState(false)
@@ -142,6 +144,7 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
     // Get broker config
     const brokerConfig = SUPPORTED_BROKERS[parserType]
     const isPDF = importSource === "pdf-corretora"
+    const isXLSX = importSource === "b3-xlsx" || importSource === "myprofit-xlsx"
 
     // ========================================
     // Handlers
@@ -155,7 +158,7 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
                 toast.error("Por favor, selecione um arquivo PDF ou CSV")
                 return
             }
-        } else {
+        } else if (isXLSX) {
             if (!filename.endsWith('.xlsx') && !filename.endsWith('.xls')) {
                 toast.error("Por favor, selecione um arquivo Excel (.xlsx)")
                 return
@@ -209,6 +212,35 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
                 setBrokerName(result.broker || null)
                 setWarnings(result.warnings)
 
+            } else if (isMyProfit) {
+                // Parse MyProfit XLSX
+                const buffer = await file.arrayBuffer()
+                const result = await parseMyProfitXLSX(buffer)
+
+                if (result.errorCount > 0 && result.successCount === 0) {
+                    toast.error("Não foi possível extrair operações do arquivo")
+                    setWarnings(result.errors)
+                    return
+                }
+
+                // Convert to unified format
+                setOperations(
+                    result.operations.map(op => ({
+                        ticker: op.ticker,
+                        name: op.name,
+                        type: op.type,
+                        quantity: op.quantity,
+                        price: op.price,
+                        total: op.total,
+                        date: op.date,
+                        assetType: op.assetType,
+                        currency: op.currency,
+                        selected: true
+                    }))
+                )
+
+                setDateRange(result.dateRange || null)
+                setWarnings(result.errors)
             } else {
                 // Parse B3 XLSX
                 const buffer = await file.arrayBuffer()
@@ -417,10 +449,17 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
                     <DialogTitle className="flex items-center gap-2">
                         {isPDF ? (
                             <FileText className="h-5 w-5 text-blue-600" />
+                        ) : isMyProfit ? (
+                            <FileSpreadsheet className="h-5 w-5 text-purple-600" />
                         ) : (
                             <FileSpreadsheet className="h-5 w-5 text-emerald-600" />
                         )}
-                        {isPDF ? "Importar Nota de Corretagem" : "Importar Movimentações B3"}
+                        {isPDF
+                            ? "Importar Nota de Corretagem"
+                            : isMyProfit
+                                ? "Importar Movimentações MyProfit"
+                                : "Importar Movimentações B3"
+                        }
                     </DialogTitle>
                     <DialogDescription>
                         {step === "upload" && "Selecione a fonte dos dados e faça upload do arquivo."}
@@ -464,6 +503,12 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
                                             <span>Movimentações B3 (Excel)</span>
                                         </div>
                                     </SelectItem>
+                                    <SelectItem value="myprofit-xlsx">
+                                        <div className="flex items-center gap-2">
+                                            <FileSpreadsheet className="h-4 w-4 text-purple-600" />
+                                            <span>Movimentações MyProfit (Excel)</span>
+                                        </div>
+                                    </SelectItem>
                                     <SelectItem value="pdf-corretora">
                                         <div className="flex items-center gap-2">
                                             <FileText className="h-4 w-4 text-blue-600" />
@@ -475,7 +520,7 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
                         </div>
 
                         {/* B3 Instructions */}
-                        {!isPDF && (
+                        {importSource === "b3-xlsx" && (
                             <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-lg p-4">
                                 <div className="flex gap-3">
                                     <AlertCircle className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
@@ -485,6 +530,24 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
                                             <li>Acesse <a href="https://www.investidor.b3.com.br" target="_blank" rel="noopener noreferrer" className="underline hover:no-underline inline-flex items-center gap-1">investidor.b3.com.br <ExternalLink className="h-3 w-3" /></a></li>
                                             <li>Faça login e vá em <strong>Extratos</strong></li>
                                             <li>Selecione a aba <strong>Movimentação</strong></li>
+                                            <li>Escolha o período desejado</li>
+                                            <li>Clique em <strong>BAIXAR</strong> (Excel)</li>
+                                        </ol>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* MyProfit Instructions */}
+                        {isMyProfit && (
+                            <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-100 dark:border-purple-800 rounded-lg p-4">
+                                <div className="flex gap-3">
+                                    <AlertCircle className="h-5 w-5 text-purple-600 shrink-0 mt-0.5" />
+                                    <div className="text-sm text-purple-800 dark:text-purple-200">
+                                        <p className="font-medium">Como baixar o arquivo do MyProfit:</p>
+                                        <ol className="mt-2 space-y-1 list-decimal list-inside text-purple-700 dark:text-purple-300">
+                                            <li>Acesse <a href="https://myprofitweb.com" target="_blank" rel="noopener noreferrer" className="underline hover:no-underline inline-flex items-center gap-1">myprofitweb.com <ExternalLink className="h-3 w-3" /></a></li>
+                                            <li>Faça login e vá em <strong>Relatórios</strong></li>
                                             <li>Escolha o período desejado</li>
                                             <li>Clique em <strong>BAIXAR</strong> (Excel)</li>
                                         </ol>
@@ -580,7 +643,12 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
                                         Arraste o arquivo aqui ou clique para selecionar
                                     </p>
                                     <p className="text-sm text-gray-500">
-                                        {isPDF ? "Formato: PDF da nota de corretagem" : "Formato: Excel (.xlsx) exportado do portal B3"}
+                                        {isPDF
+                                            ? "Formato: PDF da nota de corretagem"
+                                            : isMyProfit
+                                                ? "Formato: Excel (.xlsx) exportado do MyProfit"
+                                                : "Formato: Excel (.xlsx) exportado do portal B3"
+                                        }
                                     </p>
                                 </div>
                             )}
