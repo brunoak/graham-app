@@ -103,7 +103,7 @@ const MYPROFIT_COLUMNS = {
 /**
  * Maps MyProfit "Grupo" to internal asset type.
  */
-function mapGrupoToAssetType(grupo: string, ticker: string): AssetType {
+export function mapGrupoToAssetType(grupo: string, ticker: string): AssetType {
     const lower = grupo.toLowerCase()
 
     if (lower.includes('fundo imobiliário') || lower.includes('fii')) {
@@ -141,7 +141,7 @@ function mapGrupoToAssetType(grupo: string, ticker: string): AssetType {
 /**
  * Parses date from MyProfit Excel.
  */
-function parseMyProfitDate(value: any): Date | null {
+export function parseMyProfitDate(value: any): Date | null {
     if (!value) return null
 
     // Excel serial date number
@@ -178,7 +178,7 @@ function parseMyProfitDate(value: any): Date | null {
 /**
  * Parses currency value (handles both BRL and USD formats).
  */
-function parseCurrency(value: any): number {
+export function parseCurrency(value: any): number {
     if (typeof value === 'number') return Math.abs(value)
     if (!value) return 0
 
@@ -225,7 +225,7 @@ function findColumnIndex(headers: string[], possibleNames: readonly string[]): n
 /**
  * Maps operation type from MyProfit columns.
  */
-function mapOperationType(tipo: string, operacao: string): 'buy' | 'sell' | 'ignore' {
+export function mapOperationType(tipo: string, operacao: string): 'buy' | 'sell' | 'ignore' {
     const lowerTipo = tipo.toLowerCase().trim()
     const lowerOperacao = operacao.toLowerCase().trim()
 

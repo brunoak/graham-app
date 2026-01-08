@@ -483,7 +483,7 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
                         ) : isMyProfit ? (
                             <FileSpreadsheet className="h-5 w-5 text-purple-600" />
                         ) : isStatusInvest ? (
-                            <FileSpreadsheet className="h-5 w-5 text-green-600" />
+                            <FileSpreadsheet className="h-5 w-5 text-teal-600" />
                         ) : (
                             <FileSpreadsheet className="h-5 w-5 text-emerald-600" />
                         )}
@@ -546,7 +546,7 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
                                     </SelectItem>
                                     <SelectItem value="statusinvest-xlsx">
                                         <div className="flex items-center gap-2">
-                                            <FileSpreadsheet className="h-4 w-4 text-green-600" />
+                                            <FileSpreadsheet className="h-4 w-4 text-teal-600" />
                                             <span>Movimentações Status Invest (Excel)</span>
                                         </div>
                                     </SelectItem>
@@ -599,12 +599,12 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
 
                         {/* Status Invest Instructions */}
                         {isStatusInvest && (
-                            <div className="bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-800 rounded-lg p-4">
+                            <div className="bg-teal-50 dark:bg-teal-900/20 border border-teal-100 dark:border-teal-800 rounded-lg p-4">
                                 <div className="flex gap-3">
-                                    <AlertCircle className="h-5 w-5 text-green-600 shrink-0 mt-0.5" />
-                                    <div className="text-sm text-green-800 dark:text-green-200">
+                                    <AlertCircle className="h-5 w-5 text-teal-600 shrink-0 mt-0.5" />
+                                    <div className="text-sm text-teal-800 dark:text-teal-200">
                                         <p className="font-medium">Como baixar o arquivo do Status Invest:</p>
-                                        <ol className="mt-2 space-y-1 list-decimal list-inside text-green-700 dark:text-green-300">
+                                        <ol className="mt-2 space-y-1 list-decimal list-inside text-teal-700 dark:text-teal-300">
                                             <li>Acesse <a href="https://statusinvest.com.br" target="_blank" rel="noopener noreferrer" className="underline hover:no-underline inline-flex items-center gap-1">statusinvest.com.br <ExternalLink className="h-3 w-3" /></a></li>
                                             <li>Faça login e vá em <strong>Carteira</strong> depois <strong>Transações</strong></li>
                                             <li>Escolha o período desejado</li>

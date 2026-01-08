@@ -97,7 +97,7 @@ const STATUSINVEST_COLUMNS = {
 /**
  * Maps Status Invest "Categoria" to internal asset type.
  */
-function mapCategoriaToAssetType(categoria: string): AssetType {
+export function mapCategoriaToAssetType(categoria: string): AssetType {
     const lower = categoria.toLowerCase()
 
     if (lower.includes('fundo') && lower.includes('imobili')) {
@@ -129,7 +129,7 @@ function mapCategoriaToAssetType(categoria: string): AssetType {
 /**
  * Parses date from Status Invest Excel.
  */
-function parseStatusInvestDate(value: any): Date | null {
+export function parseStatusInvestDate(value: any): Date | null {
     if (!value) return null
 
     // Excel serial date number
@@ -166,7 +166,7 @@ function parseStatusInvestDate(value: any): Date | null {
 /**
  * Parses currency value (Brazilian format).
  */
-function parseBrazilianNumber(value: any): number {
+export function parseBrazilianNumber(value: any): number {
     if (typeof value === 'number') return Math.abs(value)
     if (!value) return 0
 
@@ -214,7 +214,7 @@ function findColumnIndex(headers: string[], possibleNames: readonly string[]): n
  * Maps operation type from Status Invest "Operação C/V" column.
  * C = Compra (Buy), V = Venda (Sell)
  */
-function mapOperationType(operacao: string): 'buy' | 'sell' {
+export function mapOperationType(operacao: string): 'buy' | 'sell' {
     const lower = operacao.toLowerCase().trim()
 
     if (lower === 'v' || lower.includes('venda') || lower.includes('sell')) {
@@ -228,7 +228,7 @@ function mapOperationType(operacao: string): 'buy' | 'sell' {
 /**
  * Cleans ticker symbol (removes unnecessary suffixes like F for fractional).
  */
-function cleanTicker(ticker: string): string {
+export function cleanTicker(ticker: string): string {
     let clean = ticker.trim().toUpperCase()
 
     // Remove fractional marker (e.g., PETR4F -> PETR4)
