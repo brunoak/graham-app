@@ -56,6 +56,7 @@ import {
 import { toast } from "sonner"
 import { parseB3XLSX, type B3Operation } from "@/lib/parsers/b3-xlsx-parser"
 import { parseMyProfitXLSX, type MyProfitOperation } from "@/lib/parsers/myprofit-xlsx-parser"
+import { parseStatusInvestXLSX, type StatusInvestOperation } from "@/lib/parsers/statusinvest-xlsx-parser"
 import {
     parseBrokerageNotePDF,
     SUPPORTED_BROKERS,
@@ -87,7 +88,7 @@ interface SelectableOperation {
     selected: boolean
 }
 
-type ImportSource = "b3-xlsx" | "myprofit-xlsx" | "pdf-corretora"
+type ImportSource = "b3-xlsx" | "myprofit-xlsx" | "statusinvest-xlsx" | "pdf-corretora"
 type ImportStep = "upload" | "preview" | "result"
 
 // Asset type mapping
@@ -144,7 +145,8 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
     // Get broker config
     const brokerConfig = SUPPORTED_BROKERS[parserType]
     const isPDF = importSource === "pdf-corretora"
-    const isXLSX = importSource === "b3-xlsx" || importSource === "myprofit-xlsx"
+    const isStatusInvest = importSource === "statusinvest-xlsx"
+    const isXLSX = importSource === "b3-xlsx" || importSource === "myprofit-xlsx" || importSource === "statusinvest-xlsx"
 
     // ========================================
     // Handlers
@@ -228,6 +230,35 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
                     result.operations.map(op => ({
                         ticker: op.ticker,
                         name: op.name,
+                        type: op.type,
+                        quantity: op.quantity,
+                        price: op.price,
+                        total: op.total,
+                        date: op.date,
+                        assetType: op.assetType,
+                        currency: op.currency,
+                        selected: true
+                    }))
+                )
+
+                setDateRange(result.dateRange || null)
+                setWarnings(result.errors)
+            } else if (isStatusInvest) {
+                // Parse Status Invest XLSX
+                const buffer = await file.arrayBuffer()
+                const result = await parseStatusInvestXLSX(buffer)
+
+                if (result.errorCount > 0 && result.successCount === 0) {
+                    toast.error("Não foi possível extrair operações do arquivo")
+                    setWarnings(result.errors)
+                    return
+                }
+
+                // Convert to unified format
+                setOperations(
+                    result.operations.map(op => ({
+                        ticker: op.ticker,
+                        name: op.category,
                         type: op.type,
                         quantity: op.quantity,
                         price: op.price,
@@ -451,6 +482,8 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
                             <FileText className="h-5 w-5 text-blue-600" />
                         ) : isMyProfit ? (
                             <FileSpreadsheet className="h-5 w-5 text-purple-600" />
+                        ) : isStatusInvest ? (
+                            <FileSpreadsheet className="h-5 w-5 text-green-600" />
                         ) : (
                             <FileSpreadsheet className="h-5 w-5 text-emerald-600" />
                         )}
@@ -458,7 +491,9 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
                             ? "Importar Nota de Corretagem"
                             : isMyProfit
                                 ? "Importar Movimentações MyProfit"
-                                : "Importar Movimentações B3"
+                                : isStatusInvest
+                                    ? "Importar Movimentações Status Invest"
+                                    : "Importar Movimentações B3"
                         }
                     </DialogTitle>
                     <DialogDescription>
@@ -509,6 +544,12 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
                                             <span>Movimentações MyProfit (Excel)</span>
                                         </div>
                                     </SelectItem>
+                                    <SelectItem value="statusinvest-xlsx">
+                                        <div className="flex items-center gap-2">
+                                            <FileSpreadsheet className="h-4 w-4 text-green-600" />
+                                            <span>Movimentações Status Invest (Excel)</span>
+                                        </div>
+                                    </SelectItem>
                                     <SelectItem value="pdf-corretora">
                                         <div className="flex items-center gap-2">
                                             <FileText className="h-4 w-4 text-blue-600" />
@@ -550,6 +591,24 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
                                             <li>Faça login e vá em <strong>Relatórios</strong></li>
                                             <li>Escolha o período desejado</li>
                                             <li>Clique em <strong>BAIXAR</strong> (Excel)</li>
+                                        </ol>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Status Invest Instructions */}
+                        {isStatusInvest && (
+                            <div className="bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-800 rounded-lg p-4">
+                                <div className="flex gap-3">
+                                    <AlertCircle className="h-5 w-5 text-green-600 shrink-0 mt-0.5" />
+                                    <div className="text-sm text-green-800 dark:text-green-200">
+                                        <p className="font-medium">Como baixar o arquivo do Status Invest:</p>
+                                        <ol className="mt-2 space-y-1 list-decimal list-inside text-green-700 dark:text-green-300">
+                                            <li>Acesse <a href="https://statusinvest.com.br" target="_blank" rel="noopener noreferrer" className="underline hover:no-underline inline-flex items-center gap-1">statusinvest.com.br <ExternalLink className="h-3 w-3" /></a></li>
+                                            <li>Faça login e vá em <strong>Carteira</strong> depois <strong>Transações</strong></li>
+                                            <li>Escolha o período desejado</li>
+                                            <li>Clique em <strong>Exportar</strong></li>
                                         </ol>
                                     </div>
                                 </div>
@@ -647,7 +706,9 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
                                             ? "Formato: PDF da nota de corretagem"
                                             : isMyProfit
                                                 ? "Formato: Excel (.xlsx) exportado do MyProfit"
-                                                : "Formato: Excel (.xlsx) exportado do portal B3"
+                                                : isStatusInvest
+                                                    ? "Formato: Excel (.xlsx) exportado do Status Invest"
+                                                    : "Formato: Excel (.xlsx) exportado do portal B3"
                                         }
                                     </p>
                                 </div>
