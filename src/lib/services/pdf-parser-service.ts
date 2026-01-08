@@ -5,7 +5,7 @@
  * The microservice should be deployed on Railway.
  */
 
-const PDF_PARSER_URL = process.env.NEXT_PUBLIC_PDF_PARSER_API_URL || process.env.PDF_PARSER_API_URL || 'http://localhost:8000'
+const PDF_PARSER_URL = process.env.NEXT_PUBLIC_PDF_PARSER_API_URL || process.env.PDF_PARSER_API_URL || 'https://graham-app-production.up.railway.app'
 
 export interface ParsedOperation {
     ticker: string
