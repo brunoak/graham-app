@@ -63,7 +63,8 @@ import {
     type ParserType,
     type ParsedOperation
 } from "@/lib/services/pdf-parser-service"
-import { createInvestmentTransaction } from "@/lib/actions/investment-actions"
+import { createInvestmentTransaction, checkDuplicateTransactions } from "@/lib/actions/investment-actions"
+import { generateOperationFingerprint } from "@/lib/utils/duplicate-detection"
 import type { AssetType } from "@/lib/schemas/investment-schema"
 
 // ============================================
@@ -86,6 +87,7 @@ interface SelectableOperation {
     assetType: string
     currency: string
     selected: boolean
+    isDuplicate?: boolean
 }
 
 type ImportSource = "b3-xlsx" | "myprofit-xlsx" | "statusinvest-xlsx" | "pdf-corretora"
@@ -182,6 +184,11 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
         setWarnings([])
 
         try {
+            let parsedOps: SelectableOperation[] = []
+            let parseWarnings: string[] = []
+            let parseDateRange: { start: Date; end: Date } | null = null
+            let parseBroker: string | null = null
+
             if (isPDF) {
                 // Parse PDF
                 const result = await parseBrokerageNotePDF(file, parserType, {
@@ -192,27 +199,25 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
                 if (!result.success && result.operations.length === 0) {
                     toast.error("Não foi possível extrair operações do arquivo")
                     setWarnings(result.warnings)
+                    setLoading(false)
                     return
                 }
 
-                // Convert to unified format
-                setOperations(
-                    result.operations.map(op => ({
-                        ticker: op.ticker,
-                        name: op.name,
-                        type: op.type as "buy" | "sell",
-                        quantity: op.quantity,
-                        price: op.price,
-                        total: op.total,
-                        date: op.trade_date ? new Date(op.trade_date) : new Date(),
-                        assetType: op.asset_type,
-                        currency: op.currency,
-                        selected: true
-                    }))
-                )
+                parsedOps = result.operations.map(op => ({
+                    ticker: op.ticker,
+                    name: op.name,
+                    type: op.type as "buy" | "sell",
+                    quantity: op.quantity,
+                    price: op.price,
+                    total: op.total,
+                    date: op.trade_date ? new Date(op.trade_date) : new Date(),
+                    assetType: op.asset_type,
+                    currency: op.currency,
+                    selected: true
+                }))
 
-                setBrokerName(result.broker || null)
-                setWarnings(result.warnings)
+                parseBroker = result.broker || null
+                parseWarnings = result.warnings
 
             } else if (isMyProfit) {
                 // Parse MyProfit XLSX
@@ -222,27 +227,26 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
                 if (result.errorCount > 0 && result.successCount === 0) {
                     toast.error("Não foi possível extrair operações do arquivo")
                     setWarnings(result.errors)
+                    setLoading(false)
                     return
                 }
 
-                // Convert to unified format
-                setOperations(
-                    result.operations.map(op => ({
-                        ticker: op.ticker,
-                        name: op.name,
-                        type: op.type,
-                        quantity: op.quantity,
-                        price: op.price,
-                        total: op.total,
-                        date: op.date,
-                        assetType: op.assetType,
-                        currency: op.currency,
-                        selected: true
-                    }))
-                )
+                parsedOps = result.operations.map(op => ({
+                    ticker: op.ticker,
+                    name: op.name,
+                    type: op.type,
+                    quantity: op.quantity,
+                    price: op.price,
+                    total: op.total,
+                    date: op.date,
+                    assetType: op.assetType,
+                    currency: op.currency,
+                    selected: true
+                }))
 
-                setDateRange(result.dateRange || null)
-                setWarnings(result.errors)
+                parseDateRange = result.dateRange || null
+                parseWarnings = result.errors
+
             } else if (isStatusInvest) {
                 // Parse Status Invest XLSX
                 const buffer = await file.arrayBuffer()
@@ -251,27 +255,26 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
                 if (result.errorCount > 0 && result.successCount === 0) {
                     toast.error("Não foi possível extrair operações do arquivo")
                     setWarnings(result.errors)
+                    setLoading(false)
                     return
                 }
 
-                // Convert to unified format
-                setOperations(
-                    result.operations.map(op => ({
-                        ticker: op.ticker,
-                        name: op.category,
-                        type: op.type,
-                        quantity: op.quantity,
-                        price: op.price,
-                        total: op.total,
-                        date: op.date,
-                        assetType: op.assetType,
-                        currency: op.currency,
-                        selected: true
-                    }))
-                )
+                parsedOps = result.operations.map(op => ({
+                    ticker: op.ticker,
+                    name: op.category,
+                    type: op.type,
+                    quantity: op.quantity,
+                    price: op.price,
+                    total: op.total,
+                    date: op.date,
+                    assetType: op.assetType,
+                    currency: op.currency,
+                    selected: true
+                }))
 
-                setDateRange(result.dateRange || null)
-                setWarnings(result.errors)
+                parseDateRange = result.dateRange || null
+                parseWarnings = result.errors
+
             } else {
                 // Parse B3 XLSX
                 const buffer = await file.arrayBuffer()
@@ -280,31 +283,73 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
                 if (result.errorCount > 0 && result.successCount === 0) {
                     toast.error("Não foi possível extrair operações do arquivo")
                     setWarnings(result.errors)
+                    setLoading(false)
                     return
                 }
 
-                // Convert to unified format
-                setOperations(
-                    result.operations.map(op => ({
-                        ticker: op.ticker,
-                        name: op.name,
-                        type: op.type,
-                        quantity: op.quantity,
-                        price: op.price,
-                        total: op.total,
-                        date: op.date,
-                        assetType: op.assetType,
-                        currency: "BRL",
-                        selected: true
-                    }))
-                )
+                parsedOps = result.operations.map(op => ({
+                    ticker: op.ticker,
+                    name: op.name,
+                    type: op.type,
+                    quantity: op.quantity,
+                    price: op.price,
+                    total: op.total,
+                    date: op.date,
+                    assetType: op.assetType,
+                    currency: "BRL",
+                    selected: true
+                }))
 
-                setDateRange(result.dateRange || null)
-                setWarnings(result.errors)
+                parseDateRange = result.dateRange || null
+                parseWarnings = result.errors
             }
 
+            // Check for duplicates
+            if (parsedOps.length > 0) {
+                try {
+                    const existingFingerprints = await checkDuplicateTransactions(
+                        parsedOps.map(op => ({
+                            ticker: op.ticker,
+                            date: op.date,
+                            quantity: op.quantity,
+                            price: op.price,
+                            type: op.type as 'buy' | 'sell' | 'dividend'
+                        }))
+                    )
+
+                    let duplicateCount = 0
+                    parsedOps = parsedOps.map(op => {
+                        const fingerprint = generateOperationFingerprint({
+                            ticker: op.ticker,
+                            date: op.date,
+                            quantity: op.quantity,
+                            price: op.price,
+                            type: op.type as 'buy' | 'sell' | 'dividend'
+                        })
+                        const isDuplicate = existingFingerprints.has(fingerprint)
+                        if (isDuplicate) duplicateCount++
+                        return {
+                            ...op,
+                            isDuplicate,
+                            selected: !isDuplicate // Unselect duplicates by default
+                        }
+                    })
+
+                    if (duplicateCount > 0) {
+                        toast.warning(`${duplicateCount} operação(ões) já existente(s) detectada(s)`)
+                    }
+                } catch (err) {
+                    console.error("Error checking duplicates:", err)
+                    // Continue without duplicate check
+                }
+            }
+
+            setOperations(parsedOps)
+            setBrokerName(parseBroker)
+            setDateRange(parseDateRange)
+            setWarnings(parseWarnings)
             setStep("preview")
-            toast.success(`${operations.length > 0 ? operations.length : "Operações"} encontradas`)
+            toast.success(`${parsedOps.length} operação(ões) encontrada(s)`)
 
         } catch (error) {
             console.error("Error parsing file:", error)
@@ -318,7 +363,7 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
         } finally {
             setLoading(false)
         }
-    }, [file, isPDF, parserType, password, operations.length])
+    }, [file, isPDF, isMyProfit, isStatusInvest, parserType, password])
 
     const handleImport = useCallback(async () => {
         const selectedOps = operations.filter(op => op.selected)
@@ -334,7 +379,19 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
         const errors: string[] = []
 
         try {
-            for (const op of selectedOps) {
+            // Sort operations by date (oldest first), then by type (buy before sell)
+            // This prevents "quantity insufficient" errors when sells depend on previous buys
+            const sortedOps = [...selectedOps].sort((a, b) => {
+                const dateA = new Date(a.date).getTime()
+                const dateB = new Date(b.date).getTime()
+                if (dateA !== dateB) return dateA - dateB
+                // On same date, buy comes before sell
+                if (a.type === 'buy' && b.type !== 'buy') return -1
+                if (a.type !== 'buy' && b.type === 'buy') return 1
+                return 0
+            })
+
+            for (const op of sortedOps) {
                 try {
                     await createInvestmentTransaction({
                         ticker: op.ticker,
@@ -485,7 +542,7 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
                         ) : isStatusInvest ? (
                             <FileSpreadsheet className="h-5 w-5 text-teal-600" />
                         ) : (
-                            <FileSpreadsheet className="h-5 w-5 text-emerald-600" />
+                            <FileSpreadsheet className="h-5 w-5 text-amber-600" />
                         )}
                         {isPDF
                             ? "Importar Nota de Corretagem"
@@ -534,7 +591,7 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
                                 <SelectContent>
                                     <SelectItem value="b3-xlsx">
                                         <div className="flex items-center gap-2">
-                                            <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+                                            <FileSpreadsheet className="h-4 w-4 text-amber-600" />
                                             <span>Movimentações B3 (Excel)</span>
                                         </div>
                                     </SelectItem>
@@ -562,12 +619,12 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
 
                         {/* B3 Instructions */}
                         {importSource === "b3-xlsx" && (
-                            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-lg p-4">
+                            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800 rounded-lg p-4">
                                 <div className="flex gap-3">
-                                    <AlertCircle className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
-                                    <div className="text-sm text-blue-800 dark:text-blue-200">
+                                    <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                                    <div className="text-sm text-amber-800 dark:text-amber-200">
                                         <p className="font-medium">Como baixar o arquivo da B3:</p>
-                                        <ol className="mt-2 space-y-1 list-decimal list-inside text-blue-700 dark:text-blue-300">
+                                        <ol className="mt-2 space-y-1 list-decimal list-inside text-amber-700 dark:text-amber-300">
                                             <li>Acesse <a href="https://www.investidor.b3.com.br" target="_blank" rel="noopener noreferrer" className="underline hover:no-underline inline-flex items-center gap-1">investidor.b3.com.br <ExternalLink className="h-3 w-3" /></a></li>
                                             <li>Faça login e vá em <strong>Extratos</strong></li>
                                             <li>Selecione a aba <strong>Movimentação</strong></li>
@@ -765,6 +822,19 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
                             </div>
                         </div>
 
+                        {/* Duplicate Warning */}
+                        {operations.filter(op => op.isDuplicate).length > 0 && (
+                            <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-3">
+                                <div className="flex items-center gap-2 text-orange-800 dark:text-orange-200">
+                                    <AlertCircle className="h-4 w-4" />
+                                    <span className="text-sm">
+                                        <strong>{operations.filter(op => op.isDuplicate).length}</strong> operação(ões) já existe(m) na sua carteira.
+                                        Elas foram desmarcadas por padrão.
+                                    </span>
+                                </div>
+                            </div>
+                        )}
+
                         {/* Warnings */}
                         {warnings.length > 0 && (
                             <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
@@ -797,13 +867,20 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
                                     {operations.map((op, index) => (
                                         <TableRow
                                             key={index}
-                                            className={!op.selected ? "opacity-50" : ""}
+                                            className={`${!op.selected ? "opacity-50" : ""} ${op.isDuplicate ? "bg-orange-50 dark:bg-orange-900/10" : ""}`}
                                         >
                                             <TableCell>
-                                                <Checkbox
-                                                    checked={op.selected}
-                                                    onCheckedChange={() => toggleOperation(index)}
-                                                />
+                                                <div className="flex items-center gap-1">
+                                                    <Checkbox
+                                                        checked={op.selected}
+                                                        onCheckedChange={() => toggleOperation(index)}
+                                                    />
+                                                    {op.isDuplicate && (
+                                                        <span title="Operação já existe">
+                                                            <AlertCircle className="h-3 w-3 text-orange-500" />
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </TableCell>
                                             <TableCell>{getTypeBadge(op.type)}</TableCell>
                                             <TableCell className="font-medium">{op.ticker}</TableCell>
@@ -931,7 +1008,10 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
                     )}
 
                     {step === "result" && (
-                        <Button onClick={() => setOpen(false)} className="w-full">
+                        <Button onClick={() => {
+                            resetModal()
+                            setOpen(false)
+                        }} className="w-full">
                             Fechar
                         </Button>
                     )}

@@ -229,7 +229,7 @@ export function mapOperationType(tipo: string, operacao: string): 'buy' | 'sell'
     const lowerTipo = tipo.toLowerCase().trim()
     const lowerOperacao = operacao.toLowerCase().trim()
 
-    // Explicit buy/sell from Tipo column
+    // Explicit buy/sell from Tipo column (priority)
     if (lowerTipo.includes('compra') || lowerTipo === 'buy') {
         return 'buy'
     }
@@ -238,6 +238,7 @@ export function mapOperationType(tipo: string, operacao: string): 'buy' | 'sell'
     }
 
     // Fallback to Operação column (Débito = sell, Crédito = buy)
+    // Note: This is a fallback, Tipo column takes priority above
     if (lowerOperacao.includes('débito') || lowerOperacao.includes('debito')) {
         return 'sell'
     }
