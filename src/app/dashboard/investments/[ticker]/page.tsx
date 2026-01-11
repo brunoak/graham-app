@@ -18,7 +18,8 @@ interface AssetPageProps {
 
 export default async function AssetPage(props: AssetPageProps) {
     const params = await props.params;
-    const { ticker } = params;
+    // Decode URL-encoded ticker (handles spaces, +, etc.)
+    const ticker = decodeURIComponent(params.ticker);
 
     // First, get the asset to check its type
     const asset = await getAssetByTicker(ticker)

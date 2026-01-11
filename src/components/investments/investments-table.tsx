@@ -287,7 +287,7 @@ export function InvestmentsTable({ viewCurrency, onViewCurrencyChange, assets, q
                                                 className="w-8 h-8"
                                             />
                                             <div className="flex flex-col">
-                                                <Link href={`/dashboard/investments/${inv.ticker}`} className="hover:underline hover:text-emerald-600 transition-colors">
+                                                <Link href={`/dashboard/investments/${encodeURIComponent(inv.ticker)}`} className="hover:underline hover:text-emerald-600 transition-colors">
                                                     <span className="font-medium text-gray-900 dark:text-gray-100">{inv.ticker}</span>
                                                 </Link>
                                                 <span className="text-xs text-muted-foreground">{inv.name}</span>
@@ -387,7 +387,7 @@ export function InvestmentsTable({ viewCurrency, onViewCurrencyChange, assets, q
                     return (
                         <Link
                             key={inv.id}
-                            href={`/dashboard/investments/${inv.ticker}`}
+                            href={`/dashboard/investments/${encodeURIComponent(inv.ticker)}`}
                             className="p-4 flex gap-3 hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors"
                         >
                             <AssetIcon
