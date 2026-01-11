@@ -8,6 +8,11 @@ import {
     type InvestmentTransaction,
     type Asset
 } from "@/lib/schemas/investment-schema"
+import {
+    roundQuantity,
+    roundPrice,
+    isLessThan
+} from "@/lib/utils/decimal-utils"
 
 // Helper to get authorized user and tenant
 async function getAuthenticatedUser() {
@@ -88,8 +93,8 @@ export async function createInvestmentTransaction(input: InvestmentTransaction &
         const totalCostOld = currentQty * currentAvg
         const totalCostNew = (tx.quantity * tx.price) + (tx.fees || 0) // Include fees in cost base
 
-        newQuantity = currentQty + tx.quantity
-        newAvgPrice = (totalCostOld + totalCostNew) / newQuantity
+        newQuantity = roundQuantity(currentQty + tx.quantity)
+        newAvgPrice = roundPrice((totalCostOld + totalCostNew) / newQuantity)
     } else if (tx.type === 'dividend') {
         // Dividend Logic
         if (!existingAsset || existingAsset.quantity <= 0) throw new Error("Não é possível adicionar dividendos para um ativo que você não possui na carteira.")
@@ -101,10 +106,17 @@ export async function createInvestmentTransaction(input: InvestmentTransaction &
         // Sell
         if (!existingAsset) throw new Error("Não é possível vender um ativo que você não possui.")
 
-        if (existingAsset.quantity < tx.quantity) throw new Error("Quantidade insuficiente para venda.")
+        // Use decimal utilities to avoid floating point precision issues
+        // e.g., 6.609999999999999 vs 6.61 should be treated as equal
+        const availableQty = roundQuantity(existingAsset.quantity)
+        const requestedQty = roundQuantity(tx.quantity)
 
-        newQuantity = existingAsset.quantity - tx.quantity
-        newAvgPrice = existingAsset.average_price // PM does NOT change on sell
+        if (isLessThan(availableQty, requestedQty)) {
+            throw new Error(`Quantidade insuficiente para venda. Disponível: ${availableQty}, Solicitado: ${requestedQty}`)
+        }
+
+        newQuantity = roundQuantity(existingAsset.quantity - tx.quantity)
+        newAvgPrice = roundPrice(existingAsset.average_price) // PM does NOT change on sell
     }
 
     // 4. Update or Create Asset
@@ -526,4 +538,56 @@ export async function getDividendHistory() {
     }
 
     return result
+}
+
+/**
+ * Check for duplicate transactions based on ticker, date, quantity, price, and type.
+ * Returns an array of "fingerprints" that already exist in the database.
+ * A fingerprint is: `${ticker}|${date}|${quantity}|${price}|${type}`
+ */
+export async function checkDuplicateTransactions(
+    operations: Array<{
+        ticker: string
+        date: Date | string
+        quantity: number
+        price: number
+        type: 'buy' | 'sell' | 'dividend'
+    }>
+): Promise<Set<string>> {
+    const { supabase } = await getAuthenticatedUser()
+
+    // Get all unique tickers from operations
+    const tickers = [...new Set(operations.map(op => op.ticker.toUpperCase()))]
+
+    if (tickers.length === 0) return new Set()
+
+    // Fetch existing transactions for these tickers
+    const { data: existingTxs, error } = await supabase
+        .from("investment_transactions")
+        .select("ticker, date, quantity, price, type")
+        .in("ticker", tickers)
+
+    if (error) {
+        console.error("Error checking duplicates:", error)
+        return new Set()
+    }
+
+    // Create a set of fingerprints for existing transactions
+    const existingFingerprints = new Set<string>()
+
+    for (const tx of existingTxs || []) {
+        // Normalize date to YYYY-MM-DD string
+        const dateStr = typeof tx.date === 'string'
+            ? tx.date.split('T')[0]
+            : new Date(tx.date).toISOString().split('T')[0]
+
+        // Round price to 2 decimal places for comparison
+        const priceRounded = Math.round(tx.price * 100) / 100
+        const qtyRounded = Math.round(tx.quantity * 1000) / 1000
+
+        const fingerprint = `${tx.ticker}|${dateStr}|${qtyRounded}|${priceRounded}|${tx.type}`
+        existingFingerprints.add(fingerprint)
+    }
+
+    return existingFingerprints
 }
