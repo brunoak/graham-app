@@ -57,6 +57,7 @@ import { toast } from "sonner"
 import { parseB3XLSX, type B3Operation } from "@/lib/parsers/b3-xlsx-parser"
 import { parseMyProfitXLSX, type MyProfitOperation } from "@/lib/parsers/myprofit-xlsx-parser"
 import { parseStatusInvestXLSX, type StatusInvestOperation } from "@/lib/parsers/statusinvest-xlsx-parser"
+import { parseKinvoXLSX, type KinvoOperation } from "@/lib/parsers/kinvo-xlsx-parser"
 import {
     parseBrokerageNotePDF,
     SUPPORTED_BROKERS,
@@ -90,7 +91,7 @@ interface SelectableOperation {
     isDuplicate?: boolean
 }
 
-type ImportSource = "b3-xlsx" | "myprofit-xlsx" | "statusinvest-xlsx" | "pdf-corretora"
+type ImportSource = "b3-xlsx" | "myprofit-xlsx" | "statusinvest-xlsx" | "kinvo-xlsx" | "pdf-corretora"
 type ImportStep = "upload" | "preview" | "result"
 
 // Asset type mapping
@@ -123,6 +124,7 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
     const [open, setOpen] = useState(false)
     const [importSource, setImportSource] = useState<ImportSource>("b3-xlsx")
     const isMyProfit = importSource === "myprofit-xlsx"
+    const isKinvo = importSource === "kinvo-xlsx"
     const [step, setStep] = useState<ImportStep>("upload")
     const [file, setFile] = useState<File | null>(null)
     const [loading, setLoading] = useState(false)
@@ -148,7 +150,7 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
     const brokerConfig = SUPPORTED_BROKERS[parserType]
     const isPDF = importSource === "pdf-corretora"
     const isStatusInvest = importSource === "statusinvest-xlsx"
-    const isXLSX = importSource === "b3-xlsx" || importSource === "myprofit-xlsx" || importSource === "statusinvest-xlsx"
+    const isXLSX = importSource === "b3-xlsx" || importSource === "myprofit-xlsx" || importSource === "statusinvest-xlsx" || importSource === "kinvo-xlsx"
 
     // ========================================
     // Handlers
@@ -223,6 +225,34 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
                 // Parse MyProfit XLSX
                 const buffer = await file.arrayBuffer()
                 const result = await parseMyProfitXLSX(buffer)
+
+                if (result.errorCount > 0 && result.successCount === 0) {
+                    toast.error("Não foi possível extrair operações do arquivo")
+                    setWarnings(result.errors)
+                    setLoading(false)
+                    return
+                }
+
+                parsedOps = result.operations.map(op => ({
+                    ticker: op.ticker,
+                    name: op.name,
+                    type: op.type,
+                    quantity: op.quantity,
+                    price: op.price,
+                    total: op.total,
+                    date: op.date,
+                    assetType: op.assetType,
+                    currency: op.currency,
+                    selected: true
+                }))
+
+                parseDateRange = result.dateRange || null
+                parseWarnings = result.errors
+
+            } else if (isKinvo) {
+                // Parse Kinvo XLSX
+                const buffer = await file.arrayBuffer()
+                const result = await parseKinvoXLSX(buffer)
 
                 if (result.errorCount > 0 && result.successCount === 0) {
                     toast.error("Não foi possível extrair operações do arquivo")
@@ -363,7 +393,7 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
         } finally {
             setLoading(false)
         }
-    }, [file, isPDF, isMyProfit, isStatusInvest, parserType, password])
+    }, [file, isPDF, isMyProfit, isKinvo, isStatusInvest, parserType, password])
 
     const handleImport = useCallback(async () => {
         const selectedOps = operations.filter(op => op.selected)
@@ -517,6 +547,8 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
 
     return (
         <Dialog open={open} onOpenChange={(isOpen) => {
+            // Prevent closing while loading
+            if (loading && !isOpen) return
             setOpen(isOpen)
             if (!isOpen) resetModal()
         }}>
@@ -532,7 +564,11 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
                 </Button>
             </DialogTrigger>
 
-            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+            <DialogContent
+                className="max-w-3xl max-h-[90vh] overflow-y-auto"
+                onInteractOutside={(e) => loading && e.preventDefault()}
+                onEscapeKeyDown={(e) => loading && e.preventDefault()}
+            >
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         {isPDF ? (
@@ -541,6 +577,8 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
                             <FileSpreadsheet className="h-5 w-5 text-purple-600" />
                         ) : isStatusInvest ? (
                             <FileSpreadsheet className="h-5 w-5 text-teal-600" />
+                        ) : isKinvo ? (
+                            <FileSpreadsheet className="h-5 w-5 text-red-600" />
                         ) : (
                             <FileSpreadsheet className="h-5 w-5 text-amber-600" />
                         )}
@@ -550,7 +588,9 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
                                 ? "Importar Movimentações MyProfit"
                                 : isStatusInvest
                                     ? "Importar Movimentações Status Invest"
-                                    : "Importar Movimentações B3"
+                                    : isKinvo
+                                        ? "Importar Movimentações Kinvo"
+                                        : "Importar Movimentações B3"
                         }
                     </DialogTitle>
                     <DialogDescription>
@@ -605,6 +645,12 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
                                         <div className="flex items-center gap-2">
                                             <FileSpreadsheet className="h-4 w-4 text-teal-600" />
                                             <span>Movimentações Status Invest (Excel)</span>
+                                        </div>
+                                    </SelectItem>
+                                    <SelectItem value="kinvo-xlsx">
+                                        <div className="flex items-center gap-2">
+                                            <FileSpreadsheet className="h-4 w-4 text-red-600" />
+                                            <span>Movimentações Kinvo (Excel)</span>
                                         </div>
                                     </SelectItem>
                                     <SelectItem value="pdf-corretora">
@@ -666,6 +712,23 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
                                             <li>Faça login e vá em <strong>Carteira</strong> depois <strong>Transações</strong></li>
                                             <li>Escolha o período desejado</li>
                                             <li>Clique em <strong>Exportar</strong></li>
+                                        </ol>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Kinvo Instructions */}
+                        {isKinvo && (
+                            <div className="bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 rounded-lg p-4">
+                                <div className="flex gap-3">
+                                    <AlertCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
+                                    <div className="text-sm text-red-800 dark:text-red-200">
+                                        <p className="font-medium">Como baixar o arquivo do Kinvo:</p>
+                                        <ol className="mt-2 space-y-1 list-decimal list-inside text-red-700 dark:text-red-300">
+                                            <li>Acesse <a href="https://app.kinvo.com.br" target="_blank" rel="noopener noreferrer" className="underline hover:no-underline inline-flex items-center gap-1">app.kinvo.com.br <ExternalLink className="h-3 w-3" /></a></li>
+                                            <li>Faça login e vá em <strong>Carteira</strong> depois <strong>Resumo</strong></li>
+                                            <li>Clique em <strong>Baixar planilha</strong></li>
                                         </ol>
                                     </div>
                                 </div>
@@ -765,7 +828,9 @@ export function UnifiedImportModal({ onImportComplete }: UnifiedImportModalProps
                                                 ? "Formato: Excel (.xlsx) exportado do MyProfit"
                                                 : isStatusInvest
                                                     ? "Formato: Excel (.xlsx) exportado do Status Invest"
-                                                    : "Formato: Excel (.xlsx) exportado do portal B3"
+                                                    : isKinvo
+                                                        ? "Formato: Excel (.xlsx) exportado do Kinvo"
+                                                        : "Formato: Excel (.xlsx) exportado do portal B3"
                                         }
                                     </p>
                                 </div>
