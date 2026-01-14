@@ -542,8 +542,12 @@ export async function getDividendHistory() {
 
 /**
  * Check for duplicate transactions based on ticker, date, quantity, price, and type.
- * Returns an array of "fingerprints" that already exist in the database.
- * A fingerprint is: `${ticker}|${date}|${quantity}|${price}|${type}`
+ * Returns a Set of "fingerprints" that already exist in the database.
+ * 
+ * Uses multiple fingerprint strategies:
+ * 1. Standard fingerprint: exact match on ticker|date|qty|price|type
+ * 2. Total value fingerprint: ticker|date|total|type (catches qty/price variations)
+ * 3. Fuzzy fingerprints: variations with small price/qty tolerances
  */
 export async function checkDuplicateTransactions(
     operations: Array<{
@@ -572,22 +576,71 @@ export async function checkDuplicateTransactions(
         return new Set()
     }
 
-    // Create a set of fingerprints for existing transactions
+    // Create Sets for different fingerprint strategies
     const existingFingerprints = new Set<string>()
+    const existingTotalFingerprints = new Set<string>()
 
     for (const tx of existingTxs || []) {
         // Normalize date to YYYY-MM-DD string
         const dateStr = typeof tx.date === 'string'
-            ? tx.date.split('T')[0]
+            ? tx.date.includes('T') ? tx.date.split('T')[0] : tx.date
             : new Date(tx.date).toISOString().split('T')[0]
 
-        // Round price to 2 decimal places for comparison
+        // Standard fingerprint (rounded values)
         const priceRounded = Math.round(tx.price * 100) / 100
         const qtyRounded = Math.round(tx.quantity * 1000) / 1000
-
         const fingerprint = `${tx.ticker}|${dateStr}|${qtyRounded}|${priceRounded}|${tx.type}`
         existingFingerprints.add(fingerprint)
+
+        // Total value fingerprint (catches variations where qty*price is same)
+        const total = Math.round(tx.quantity * tx.price * 100) / 100
+        const totalFingerprint = `${tx.ticker}|${dateStr}|${total}|${tx.type}`
+        existingTotalFingerprints.add(totalFingerprint)
+
+        // Add fuzzy variations (+/- 0.01, 0.02 in price)
+        for (const priceDelta of [0.01, -0.01, 0.02, -0.02]) {
+            const fuzzyPrice = Math.round((tx.price + priceDelta) * 100) / 100
+            existingFingerprints.add(`${tx.ticker}|${dateStr}|${qtyRounded}|${fuzzyPrice}|${tx.type}`)
+        }
     }
 
-    return existingFingerprints
+    // Now check which of the incoming operations match
+    const matchingFingerprints = new Set<string>()
+
+    for (const op of operations) {
+        const dateStr = op.date instanceof Date
+            ? op.date.toISOString().split('T')[0]
+            : (op.date.includes('T') ? op.date.split('T')[0] : op.date)
+
+        const priceRounded = Math.round(op.price * 100) / 100
+        const qtyRounded = Math.round(op.quantity * 1000) / 1000
+        const fingerprint = `${op.ticker.toUpperCase()}|${dateStr}|${qtyRounded}|${priceRounded}|${op.type}`
+
+        // Check standard fingerprint
+        if (existingFingerprints.has(fingerprint)) {
+            matchingFingerprints.add(fingerprint)
+            continue
+        }
+
+        // Check total value fingerprint (for cases where price varies slightly)
+        const total = Math.round(op.quantity * op.price * 100) / 100
+        const totalFingerprint = `${op.ticker.toUpperCase()}|${dateStr}|${total}|${op.type}`
+        if (existingTotalFingerprints.has(totalFingerprint)) {
+            matchingFingerprints.add(fingerprint) // Add the original fingerprint
+            continue
+        }
+
+        // Check fuzzy variations
+        for (const priceDelta of [0.01, -0.01, 0.02, -0.02]) {
+            const fuzzyPrice = Math.round((op.price + priceDelta) * 100) / 100
+            const fuzzyFingerprint = `${op.ticker.toUpperCase()}|${dateStr}|${qtyRounded}|${fuzzyPrice}|${op.type}`
+            if (existingFingerprints.has(fuzzyFingerprint)) {
+                matchingFingerprints.add(fingerprint)
+                break
+            }
+        }
+    }
+
+    return matchingFingerprints
 }
+
