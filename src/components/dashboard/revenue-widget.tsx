@@ -1,151 +1,144 @@
 "use client"
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Area, AreaChart, CartesianGrid, XAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell } from "recharts"
-import { Info } from "lucide-react"
+import {
+    BarChart, Bar, CartesianGrid,
+    XAxis, YAxis, ResponsiveContainer, Tooltip, Legend
+} from "recharts"
 
 import { MonthlyMetric, CategoryMetric } from "@/lib/data/dashboard-data"
 import { ChartSkeleton } from "@/components/ui/chart-skeleton"
+
+type Period = "3M" | "6M" | "1A"
 
 interface RevenueWidgetProps {
     monthlyData: MonthlyMetric[]
     categoryData: CategoryMetric[]
 }
 
+// Custom Tooltip para o BarChart
+function CustomBarTooltip({ active, payload, label }: any) {
+    if (!active || !payload?.length) return null
+    return (
+        <div className="bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg px-4 py-3 shadow-lg text-sm">
+            <p className="font-semibold text-gray-700 dark:text-gray-200 mb-2">{label}</p>
+            {payload.map((entry: any) => (
+                <div key={entry.dataKey} className="flex items-center gap-2">
+                    <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: entry.fill }} />
+                    <span className="text-gray-600 dark:text-gray-400">{entry.name}:</span>
+                    <span className="font-medium text-gray-900 dark:text-white">
+                        {`R$ ${Number(entry.value).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`}
+                    </span>
+                </div>
+            ))}
+        </div>
+    )
+}
+
+const PERIOD_MONTHS: Record<Period, number> = {
+    "3M": 3,
+    "6M": 6,
+    "1A": 12,
+}
+
 export function RevenueWidget({ monthlyData, categoryData }: RevenueWidgetProps) {
-    const [view, setView] = useState<"overview" | "sources">("overview")
-    const [status, setStatus] = useState<"loading" | "empty" | "data">("loading")
+    const [period, setPeriod] = useState<Period>("6M")
 
-    // Simulate full lifecycle for demo: Loading -> Empty (Welcome) -> Data
-    useEffect(() => {
-        // 1. Start loading (Shimmer)
-        const timer1 = setTimeout(() => {
-            setStatus("empty") // 2. Show "Welcome/Empty" state (Permanent for demo)
-        }, 2500)
+    // Filtra os dados no cliente conforme o período selecionado
+    const filteredData = monthlyData.slice(-PERIOD_MONTHS[period])
 
-        return () => {
-            clearTimeout(timer1)
-        }
-    }, [])
+    // Deriva o status diretamente dos dados reais
+    const hasData = filteredData.some(m => m.income > 0 || m.expense > 0)
 
     return (
         <Card className="col-span-12 lg:col-span-8 bg-white dark:bg-zinc-900 border-none shadow-sm shadow-gray-200 dark:shadow-none flex flex-col h-full min-h-[400px]">
             <CardHeader className="flex flex-row items-center justify-between pb-8">
-                <CardTitle className="text-lg font-semibold text-gray-900 dark:text-white">
-                    {view === "overview" ? "Receita" : "Fontes de Receita"}
-                </CardTitle>
-                <div className="flex items-center gap-1 bg-gray-100 dark:bg-zinc-800 p-1 rounded-md">
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setView("overview")}
-                        className={`h-6 px-2 text-xs font-medium shadow-sm transition-all ${view === "overview" ? "bg-white dark:bg-zinc-700 text-gray-900 dark:text-white" : "text-muted-foreground hover:text-gray-900 dark:hover:text-white"}`}
-                    >
-                        Visão Geral
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setView("sources")}
-                        className={`h-6 px-2 text-xs font-medium shadow-sm transition-all ${view === "sources" ? "bg-white dark:bg-zinc-700 text-gray-900 dark:text-white" : "text-muted-foreground hover:text-gray-900 dark:hover:text-white"}`}
-                    >
-                        Fontes
-                    </Button>
+                <div>
+                    <CardTitle className="text-lg font-semibold text-gray-900 dark:text-white">
+                        Histórico Financeiro
+                    </CardTitle>
+                    <p className="text-xs text-muted-foreground mt-0.5">Comparativo mensal de entradas e saídas</p>
+                </div>
+
+                {/* Botões de período: 3M, 6M, 1A */}
+                <div className="flex items-center gap-1.5 bg-gray-100 dark:bg-zinc-800 p-1 rounded-lg">
+                    {(["3M", "6M", "1A"] as Period[]).map((p) => (
+                        <button
+                            key={p}
+                            onClick={() => setPeriod(p)}
+                            className={`
+                                h-7 w-9 text-xs font-semibold rounded-md transition-all
+                                ${period === p
+                                    ? "bg-emerald-500 text-white shadow-sm"
+                                    : "text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                                }
+                            `}
+                        >
+                            {p}
+                        </button>
+                    ))}
                 </div>
             </CardHeader>
-            <CardContent className="flex-1 min-h-0 pl-0 relative">
-                {status === "loading" && (
-                    <ChartSkeleton variant="content" mode="loading" type="area" className="h-full" />
-                )}
 
-                {status === "empty" && (
+            <CardContent className="flex-1 min-h-0 pl-0 relative">
+                {!hasData && (
                     <ChartSkeleton variant="content" mode="empty" type="area" message="Sem dados de receita para exibir" className="h-full" />
                 )}
 
-                {status === "data" && (
-                    view === "overview" ? (
-                        <ResponsiveContainer width="100%" height="100%" minHeight={300}>
-                            <AreaChart data={monthlyData}>
-                                <defs>
-                                    <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                                        <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                                    </linearGradient>
-                                </defs>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" className="dark:stroke-zinc-800" />
-                                <XAxis
-                                    dataKey="name"
-                                    stroke="#9CA3AF"
-                                    fontSize={12}
-                                    tickLine={false}
-                                    axisLine={false}
-                                    tickMargin={10}
-                                />
-                                <Tooltip
-                                    contentStyle={{ backgroundColor: 'var(--background)', borderColor: 'var(--border)', borderRadius: '8px' }}
-                                    itemStyle={{ color: 'var(--foreground)' }}
-                                    formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, 'Receita']}
-                                />
-                                <Area
-                                    type="monotone"
-                                    dataKey="income"
-                                    stroke="#10b981"
-                                    fillOpacity={1}
-                                    fill="url(#colorTotal)"
-                                    strokeWidth={2}
-                                />
-                            </AreaChart>
-                        </ResponsiveContainer>
-                    ) : (
-                        <div className="flex flex-col md:flex-row items-center justify-around h-full gap-8">
-                            <div className="relative h-[250px] w-full md:w-1/2 flex items-center justify-center">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <PieChart>
-                                        <Pie
-                                            data={categoryData.length > 0 ? categoryData : [{ name: "Sem dados", value: 1, color: "#e5e7eb" } as any]} // Fallback for empty
-                                            cx="50%"
-                                            cy="50%"
-                                            innerRadius={60}
-                                            outerRadius={80}
-                                            paddingAngle={5}
-                                            dataKey="value"
-                                            stroke="none"
-                                        >
-                                            {categoryData.map((entry, index) => (
-                                                <Cell key={`cell-${index}`} fill={entry.color || "#0ea5e9"} />
-                                            ))}
-                                        </Pie>
-                                        <Tooltip />
-                                    </PieChart>
-                                </ResponsiveContainer>
-                                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                                    <span className="text-sm font-medium text-muted-foreground">Total</span>
-                                    <span className="text-2xl font-bold text-gray-900 dark:text-white">
-                                        {categoryData.length}
-                                    </span>
-                                </div>
-                            </div>
-
-                            <div className="space-y-4 w-full md:w-1/3">
-                                <div className="flex items-center justify-between text-xs font-semibold text-gray-500 uppercase pb-2 border-b border-gray-100 dark:border-zinc-800">
-                                    <span>Origem</span>
-                                    <span>Valor</span>
-                                </div>
-                                {categoryData.map((item) => (
-                                    <div key={item.name} className="flex items-center justify-between text-sm">
-                                        <div className="flex items-center gap-2">
-                                            <div className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color || "#0ea5e9" }} />
-                                            <span className="text-gray-700 dark:text-gray-300 font-medium">{item.name}</span>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-gray-500 font-medium">R$ {item.value}</span>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )
+                {hasData && (
+                    <ResponsiveContainer width="100%" height="100%" minHeight={300}>
+                        <BarChart
+                            data={filteredData}
+                            barCategoryGap="30%"
+                            barGap={4}
+                            margin={{ top: 8, right: 16, left: 8, bottom: 0 }}
+                        >
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" className="dark:stroke-zinc-800" />
+                            <XAxis
+                                dataKey="month"
+                                stroke="#9CA3AF"
+                                fontSize={12}
+                                tickLine={false}
+                                axisLine={false}
+                                tickMargin={10}
+                            />
+                            <YAxis
+                                stroke="#9CA3AF"
+                                fontSize={11}
+                                tickLine={false}
+                                axisLine={false}
+                                tickMargin={8}
+                                tickFormatter={(value: number) => {
+                                    if (value >= 1000000) return `R$ ${(value / 1000000).toFixed(1)}M`
+                                    if (value >= 1000) return `R$ ${(value / 1000).toFixed(0)}k`
+                                    return `R$ ${value}`
+                                }}
+                                width={72}
+                            />
+                            <Tooltip content={<CustomBarTooltip />} cursor={{ fill: "rgba(156,163,175,0.08)" }} />
+                            <Legend
+                                iconType="circle"
+                                iconSize={8}
+                                formatter={(value) => (
+                                    <span className="text-xs text-gray-600 dark:text-gray-400">{value}</span>
+                                )}
+                            />
+                            <Bar
+                                dataKey="income"
+                                name="Entradas"
+                                fill="#22c55e"
+                                radius={[4, 4, 0, 0]}
+                                maxBarSize={40}
+                            />
+                            <Bar
+                                dataKey="expense"
+                                name="Saídas"
+                                fill="#ef4444"
+                                radius={[4, 4, 0, 0]}
+                                maxBarSize={40}
+                            />
+                        </BarChart>
+                    </ResponsiveContainer>
                 )}
             </CardContent>
         </Card>

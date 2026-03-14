@@ -5,7 +5,7 @@ import { RevenueWidget } from "@/components/dashboard/revenue-widget"
 import { TransactionsTable } from "@/components/transactions/transactions-table"
 import { ArkadWidget } from "@/components/arkad/arkad-widget"
 import { InvestmentsOverview } from "@/components/dashboard/investments-overview"
-import { getFinancialSummary, getMonthlyHistory, getCategoryBreakdown } from "@/lib/data/dashboard-data"
+import { getFinancialSummary, getMonthlyHistory, getCategoryBreakdown, getPortfolioPerformance, getMarketOverview } from "@/lib/data/dashboard-data"
 import { getTransactions } from "@/lib/data/transaction-data"
 
 export default async function DashboardPage() {
@@ -20,9 +20,13 @@ export default async function DashboardPage() {
     }
 
     // const summary = await getFinancialSummary() // Moved to DashboardSummary component
-    const monthlyHistory = await getMonthlyHistory()
-    const categoryBreakdown = await getCategoryBreakdown()
-    const { data: transactions } = await getTransactions(1, 5)
+    const [monthlyHistory, categoryBreakdown, portfolioPerformance, marketData, { data: transactions }] = await Promise.all([
+        getMonthlyHistory(12),
+        getCategoryBreakdown(),
+        getPortfolioPerformance(),
+        getMarketOverview(),
+        getTransactions(1, 5),
+    ])
 
     return (
         <div className="space-y-6">
@@ -46,7 +50,7 @@ export default async function DashboardPage() {
 
                 {/* Row 2: Investments */}
                 <div className="col-span-12">
-                    <InvestmentsOverview />
+                    <InvestmentsOverview portfolio={portfolioPerformance} marketData={marketData} />
                 </div>
 
                 {/* Row 3: Recent Transactions */}

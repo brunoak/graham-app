@@ -26,6 +26,12 @@ describe('arkad-data-service', () => {
             const emptyContext: ArkadContext = {
                 tenantId: 1,
                 assets: [],
+                portfolioTotal: {
+                    cost: 0,
+                    marketValue: 0,
+                    gain: 0,
+                    gainPercent: 0,
+                },
                 transactions: {
                     total: 0,
                     income: 0,
@@ -56,8 +62,10 @@ describe('arkad-data-service', () => {
                         type: 'stock',
                         quantity: 100,
                         averagePrice: 35.50,
+                        currentPrice: 38.00,
                         currency: 'BRL',
                         totalCost: 3550,
+                        marketValue: 3800,
                     },
                     {
                         ticker: 'XPML11',
@@ -65,10 +73,18 @@ describe('arkad-data-service', () => {
                         type: 'fii',
                         quantity: 50,
                         averagePrice: 100,
+                        currentPrice: 105,
                         currency: 'BRL',
                         totalCost: 5000,
+                        marketValue: 5250,
                     },
                 ],
+                portfolioTotal: {
+                    cost: 8550,
+                    marketValue: 9050,
+                    gain: 500,
+                    gainPercent: 5.85,
+                },
                 transactions: {
                     total: 0,
                     income: 0,
@@ -88,13 +104,19 @@ describe('arkad-data-service', () => {
             expect(result).toContain('100 cotas')
             expect(result).toContain('50 cotas')
             expect(result).toContain('Quantidade de Ativos: 2')
-            expect(result).toContain('R$ 8.550,00') // Total invested
+            expect(result).toContain('R$ 9.050,00') // Market value
         })
 
         it('should format transactions correctly', () => {
             const contextWithTransactions: ArkadContext = {
                 tenantId: 1,
                 assets: [],
+                portfolioTotal: {
+                    cost: 0,
+                    marketValue: 0,
+                    gain: 0,
+                    gainPercent: 0,
+                },
                 transactions: {
                     total: 5,
                     income: 5000,
@@ -139,6 +161,12 @@ describe('arkad-data-service', () => {
             const contextWithGoals: ArkadContext = {
                 tenantId: 1,
                 assets: [],
+                portfolioTotal: {
+                    cost: 0,
+                    marketValue: 0,
+                    gain: 0,
+                    gainPercent: 0,
+                },
                 transactions: {
                     total: 0,
                     income: 0,
@@ -171,6 +199,12 @@ describe('arkad-data-service', () => {
             const contextWithAccounts: ArkadContext = {
                 tenantId: 1,
                 assets: [],
+                portfolioTotal: {
+                    cost: 0,
+                    marketValue: 0,
+                    gain: 0,
+                    gainPercent: 0,
+                },
                 transactions: {
                     total: 0,
                     income: 0,
@@ -198,6 +232,12 @@ describe('arkad-data-service', () => {
             const context: ArkadContext = {
                 tenantId: 1,
                 assets: [],
+                portfolioTotal: {
+                    cost: 0,
+                    marketValue: 0,
+                    gain: 0,
+                    gainPercent: 0,
+                },
                 transactions: {
                     total: 0,
                     income: 0,

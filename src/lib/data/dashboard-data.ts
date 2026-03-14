@@ -135,9 +135,9 @@ export async function getFinancialSummary(date: Date = new Date()): Promise<Fina
 }
 
 /**
- * Returns data for the Revenue/Expense Bar Chart (Last 6 months).
+ * Returns data for the Revenue/Expense Bar Chart (Last N months, default 12).
  */
-export async function getMonthlyHistory(): Promise<MonthlyMetric[]> {
+export async function getMonthlyHistory(months: number = 12): Promise<MonthlyMetric[]> {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return []
@@ -145,9 +145,9 @@ export async function getMonthlyHistory(): Promise<MonthlyMetric[]> {
     const { data: profile } = await supabase.from("users").select("tenant_id").eq("id", user.id).single()
     if (!profile) return []
 
-    // Calculate start date (6 months ago)
+    // Calculate start date (N months ago)
     const today = new Date()
-    const startDate = new Date(today.getFullYear(), today.getMonth() - 5, 1) // Start of 6th month ago
+    const startDate = new Date(today.getFullYear(), today.getMonth() - (months - 1), 1)
 
     const { data: transactions } = await supabase
         .from("transactions")
@@ -158,18 +158,18 @@ export async function getMonthlyHistory(): Promise<MonthlyMetric[]> {
 
     if (!transactions) return []
 
-    // Initialize last 6 months buckets
+    // Initialize N months buckets
     const historyMap = new Map<string, MonthlyMetric>()
 
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < months; i++) {
         const d = new Date(startDate.getFullYear(), startDate.getMonth() + i, 1)
-        const key = `${MONTHS_PT[d.getMonth()]}`
+        const key = `${MONTHS_PT[d.getMonth()]}/${String(d.getFullYear()).slice(2)}`
         historyMap.set(key, { month: key, income: 0, expense: 0 })
     }
 
     transactions.forEach(t => {
         const d = new Date(t.date)
-        const key = MONTHS_PT[d.getMonth()]
+        const key = `${MONTHS_PT[d.getMonth()]}/${String(d.getFullYear()).slice(2)}`
 
         if (historyMap.has(key)) {
             const entry = historyMap.get(key)!
@@ -246,4 +246,149 @@ export async function getCategoryBreakdown(date: Date = new Date()): Promise<Cat
     return Array.from(categoryMap.values())
         .sort((a, b) => b.value - a.value)
         .slice(0, 5) // Top 5 categories
+}
+
+export interface PortfolioAsset {
+    ticker: string
+    name: string
+    variation: number    // Ex: 1.94 (percentage)
+    price: number        // Current market price
+    logourl?: string     // Official logo from Brapi
+}
+
+export interface PortfolioPerformance {
+    gainers: PortfolioAsset[]  // Top 4 em alta
+    losers: PortfolioAsset[]   // Top 4 em baixa
+}
+
+/**
+ * Returns portfolio top gainers and losers with real-time market quotes.
+ * Fetches up to 4 assets per category.
+ */
+export async function getPortfolioPerformance(): Promise<PortfolioPerformance> {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { gainers: [], losers: [] }
+
+    const { data: profile } = await supabase.from("users").select("tenant_id").eq("id", user.id).single()
+    if (!profile) return { gainers: [], losers: [] }
+
+    // Fetch assets with positive quantity
+    const { data: assets } = await supabase
+        .from("assets")
+        .select("ticker, name")
+        .eq("tenant_id", profile.tenant_id)
+        .gt("quantity", 0)
+
+    if (!assets || assets.length === 0) return { gainers: [], losers: [] }
+
+    // Fetch real-time quotes in parallel
+    const { getMarketQuote } = await import("@/lib/services/market-service")
+    const quoteResults = await Promise.all(
+        assets.map(asset => getMarketQuote(asset.ticker))
+    )
+
+    // Merge assets with their quotes
+    const assetsWithQuotes: PortfolioAsset[] = (assets
+        .map((asset, i): PortfolioAsset | null => {
+            const quote = quoteResults[i]
+            if (!quote) return null
+            return {
+                ticker: asset.ticker,
+                name: asset.name || asset.ticker,
+                variation: quote.regularMarketChangePercent ?? 0,
+                price: quote.regularMarketPrice ?? 0,
+                logourl: quote.logourl,
+            }
+        })
+        .filter(Boolean) as PortfolioAsset[])
+
+    // Sort: gainers descending, losers ascending
+    const sorted = [...assetsWithQuotes].sort((a, b) => b.variation - a.variation)
+    const gainers = sorted.filter(a => a.variation >= 0).slice(0, 4)
+    const losers = sorted.filter(a => a.variation < 0).slice(-4).reverse() // worst first
+
+    return { gainers, losers }
+}
+
+export interface MarketItem {
+    name: string
+    ticker: string
+    variation: number  // percentage, e.g. 1.23
+    price: number      // in local currency
+    currency: string   // 'BRL' or 'USD'
+}
+
+// Definitions of market items to show in the Mercado widget
+const MARKET_DEFINITIONS = [
+    { ticker: "USDBRL=X", name: "Dólar (Comercial)", currency: "BRL" },
+    { ticker: "EURBRL=X", name: "Euro (Comercial)",  currency: "BRL" },
+    { ticker: "^BVSP",    name: "Ibovespa (Ibov)",   currency: "BRL" },
+    { ticker: "IFIX",     name: "Ifix (IND FDO)",    currency: "BRL" },
+    { ticker: "BTC",      name: "Bitcoin (BTC)",      currency: "BRL" },
+]
+
+/**
+ * Returns live market quotes for the Mercado widget.
+ * Uses Brapi as primary source; Yahoo Finance as fallback.
+ * Bitcoin special-case: Brapi returns BRL price directly. If Brapi fails,
+ * Yahoo returns USD price which is multiplied by USDBRL=X rate.
+ */
+export async function getMarketOverview(): Promise<MarketItem[]> {
+    const { getMarketQuote } = await import("@/lib/services/market-service")
+
+    // Fetch all definitions + BTC-USD in parallel (for fallback conversion)
+    const nonBtcDefs = MARKET_DEFINITIONS.filter(d => d.ticker !== "BTC")
+    const [nonBtcQuotes, btcBrapi, btcUsd] = await Promise.all([
+        Promise.all(nonBtcDefs.map(d => getMarketQuote(d.ticker).catch(() => null))),
+        getMarketQuote("BTC").catch(() => null),
+        getMarketQuote("BTC-USD").catch(() => null),
+    ])
+
+    // Determine USDBRL rate from already-fetched quotes
+    const usdQuote = nonBtcQuotes[nonBtcDefs.findIndex(d => d.ticker === "USDBRL=X")]
+    const usdBrl = usdQuote?.regularMarketPrice ?? 5.85
+
+    // Build Bitcoin item — always show in USD
+    let btcItem: MarketItem | null = null
+    if (btcUsd && btcUsd.regularMarketPrice > 100) {
+        // Yahoo BTC-USD is reliable and already in USD
+        btcItem = {
+            name: "Bitcoin (BTC)",
+            ticker: "BTC-USD",
+            variation: btcUsd.regularMarketChangePercent ?? 0,
+            price: btcUsd.regularMarketPrice,
+            currency: "USD",
+        }
+    } else if (btcBrapi && btcBrapi.regularMarketPrice > 100) {
+        // Brapi returns BRL price — convert back to USD using our USDBRL rate
+        btcItem = {
+            name: "Bitcoin (BTC)",
+            ticker: "BTC",
+            variation: btcBrapi.regularMarketChangePercent ?? 0,
+            price: btcBrapi.regularMarketPrice / usdBrl,
+            currency: "USD",
+        }
+    }
+
+    // Build all non-BTC items
+    const items: MarketItem[] = nonBtcDefs
+        .map((def, i): MarketItem | null => {
+            const q = nonBtcQuotes[i]
+            if (!q) return null
+            return {
+                name: def.name,
+                ticker: def.ticker,
+                variation: q.regularMarketChangePercent ?? 0,
+                price: q.regularMarketPrice ?? 0,
+                currency: def.currency,
+            }
+        })
+        .filter(Boolean) as MarketItem[]
+
+    if (btcItem) items.push(btcItem)
+
+    // Keep original order
+    const order = MARKET_DEFINITIONS.map(d => d.ticker)
+    return items.sort((a, b) => order.indexOf(a.ticker) - order.indexOf(b.ticker))
 }
