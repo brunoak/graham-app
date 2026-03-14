@@ -151,7 +151,8 @@ export function ImportModal({ onImportComplete, children }: ImportModalProps) {
         if (!bank) return 'Selecione o banco primeiro'
         const formats = BANK_FORMATS[bank]
         if (!formats) return 'OFX, CSV'
-        return formats[sourceType]?.join(', ') || 'OFX, CSV'
+        const key = sourceType as 'extrato' | 'fatura'
+        return formats[key]?.join(', ') || 'OFX, CSV'
     }
 
     /**

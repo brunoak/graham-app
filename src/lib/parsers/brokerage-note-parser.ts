@@ -291,7 +291,6 @@ function extractFees(text: string): BrokerageFees {
 
 async function extractTextFromPdf(buffer: Buffer, password?: string): Promise<string> {
     return new Promise((resolve, reject) => {
-        // @ts-expect-error - pdf2json types are incomplete
         const pdfParser = new PDFParser()
 
         // Set password if provided (for protected PDFs)

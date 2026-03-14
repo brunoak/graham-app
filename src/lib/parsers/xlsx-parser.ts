@@ -91,6 +91,7 @@ export const XLSX_TEMPLATES: Record<BankType, XLSXTemplate | undefined> = {
     c6: undefined,
     btg: undefined,  // BTG uses XLSX but format TBD
     picpay: undefined,
+    rico: undefined,
     unknown: undefined,
 }
 
@@ -324,7 +325,7 @@ export async function parseXLSX(
                     : description
 
                 // Extract name and payment method
-                const extracted = extractTransactionData(fullDescription, sourceType)
+                const extracted = extractTransactionData(fullDescription, sourceType as 'extrato' | 'fatura' | undefined)
 
                 const transaction: ParsedTransaction = {
                     date,

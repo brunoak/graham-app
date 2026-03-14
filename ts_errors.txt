@@ -1,0 +1,7 @@
+﻿src/lib/parsers/brokerage-note-parser.ts(294,9): error TS2578: Unused '@ts-expect-error' directive.
+src/lib/parsers/csv-parser.ts(549,71): error TS2345: Argument of type 'FileSourceType | undefined' is not assignable to parameter of type '"extrato" | "fatura" | undefined'.
+  Type '"nota_corretagem"' is not assignable to type '"extrato" | "fatura" | undefined'.
+src/lib/parsers/ofx-parser.ts(106,11): error TS2741: Property 'rico' is missing in type '{ itau: string; bb: string; bradesco: string; santander: string; caixa: string; nubank: string; inter: string; c6: string; btg: string; picpay: string; unknown: string; }' but required in type 'Record<BankType, string>'.
+src/lib/parsers/xlsx-parser.ts(83,14): error TS2741: Property 'rico' is missing in type '{ itau: XLSXTemplate; bb: undefined; bradesco: undefined; santander: undefined; caixa: undefined; nubank: undefined; inter: undefined; c6: undefined; btg: undefined; picpay: undefined; unknown: undefined; }' but required in type 'Record<BankType, XLSXTemplate | undefined>'.
+src/lib/parsers/xlsx-parser.ts(327,75): error TS2345: Argument of type 'FileSourceType | undefined' is not assignable to parameter of type '"extrato" | "fatura" | undefined'.
+  Type '"nota_corretagem"' is not assignable to type '"extrato" | "fatura" | undefined'.

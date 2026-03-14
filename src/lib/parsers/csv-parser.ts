@@ -546,7 +546,7 @@ export async function parseCSV(
 
             // Extract name and payment method from the description
             // Pass sourceType to detect credit card for fatura files
-            const extracted = extractTransactionData(fullDescription, sourceType)
+            const extracted = extractTransactionData(fullDescription, sourceType as 'extrato' | 'fatura' | undefined)
 
             const transaction: ParsedTransaction = {
                 date,

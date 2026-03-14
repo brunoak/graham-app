@@ -114,6 +114,7 @@ export function getBankDisplayName(bank: BankType): string {
         c6: 'C6 Bank',
         btg: 'BTG Pactual',
         picpay: 'PicPay',
+        rico: 'Rico Conta Digital',
         unknown: 'Banco',
     }
     return names[bank] || 'Banco'
