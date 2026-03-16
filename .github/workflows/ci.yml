@@ -1,0 +1,32 @@
+name: Graham CI - Auditoria de Qualidade e Segurança
+
+# O robô só acorda quando um Pull Request é aberto para a branch principal (main)
+on:
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  auditoria:
+    name: Testes e Verificações
+    runs-on: ubuntu-latest # O robô roda num servidor Linux limpo
+
+    steps:
+      - name: 📥 Clonando o código do Graham
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Configurando o Motor (Node.js)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20' # Versão ideal para Next.js 14
+          cache: 'npm'
+
+      - name: 📦 Instalando Dependências
+        run: npm ci
+
+      - name: 🔍 Auditoria de Código (ESLint)
+        # Verifica se a IA não deixou variáveis soltas ou código sujo
+        run: npm run lint
+
+      - name: 🧪 Testes do Coração Financeiro (Vitest)
+        # Roda nossos testes de matemática e os futuros testes de RLS
+        run: npx vitest run
